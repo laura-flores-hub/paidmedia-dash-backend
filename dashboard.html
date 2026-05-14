@@ -29,29 +29,40 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .nav-item.active{background:#1d4ed8;color:#fff}
 .nav-item svg{width:15px;height:15px;flex-shrink:0}
 
-.sidebar-filters{padding:10px 12px;border-top:1px solid #1e293b}
-.sf-label{font-size:10px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;margin-top:10px}
-.sf-label:first-child{margin-top:0}
-.region-list{display:flex;flex-direction:column;gap:3px;max-height:200px;overflow-y:auto}
-.region-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;color:#94a3b8;font-size:11px;transition:background .1s}
-.region-item:hover{background:#1e293b}
-.region-item input{accent-color:#3b82f6;cursor:pointer}
-.region-item.checked{color:#e2e8f0}
-.date-inputs{display:flex;flex-direction:column;gap:6px}
-.date-input{width:100%;padding:5px 8px;border:1px solid #334155;border-radius:5px;background:#1e293b;color:#e2e8f0;font-size:11px;outline:none}
-.date-input:focus{border-color:#3b82f6}
-.reset-btn{width:100%;margin-top:10px;padding:6px;border-radius:5px;border:1px solid #334155;background:transparent;color:#64748b;font-size:11px;cursor:pointer;transition:all .12s}
-.reset-btn:hover{border-color:#3b82f6;color:#93c5fd}
 .sidebar-footer{padding:10px 16px;border-top:1px solid #1e293b;font-size:10px;color:#475569}
 
 .main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
 .topbar{background:var(--card);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
 .topbar h2{font-size:15px;font-weight:700}
+.topbar-right{display:flex;align-items:center;gap:10px}
 .filter-summary{font-size:11px;color:var(--muted);background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:4px 10px}
+.filters-menu{position:relative}
+.filters-btn{border:1px solid var(--border);background:#fff;color:var(--text);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer}
+.filters-btn:hover{border-color:#cbd5e1}
+.filters-dropdown{display:none;position:absolute;right:0;top:38px;z-index:20;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);padding:12px;min-width:340px}
+.filters-dropdown.open{display:block}
+.filters-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.sf-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.date-inputs{display:flex;flex-direction:column;gap:6px}
+.top-filter-input{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text);font-size:12px;outline:none}
+.top-filter-input:focus{border-color:#3b82f6}
+.region-list{display:flex;flex-direction:column;gap:4px;max-height:170px;overflow-y:auto;border:1px solid #f1f5f9;border-radius:6px;padding:6px}
+.region-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;color:var(--muted);font-size:11px;transition:background .1s}
+.region-item:hover{background:#f8fafc}
+.region-item input{accent-color:#3b82f6;cursor:pointer}
+.region-item.checked{color:var(--text)}
+.reset-btn{width:100%;margin-top:10px;padding:6px;border-radius:6px;border:1px solid var(--border);background:#fff;color:var(--muted);font-size:11px;cursor:pointer;transition:all .12s}
+.reset-btn:hover{border-color:#3b82f6;color:#1d4ed8}
 
 .content{padding:20px 24px;flex:1}
 .section{display:none}
 .section.active{display:block}
+
+.view-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.view-toggle-group{display:inline-flex;border:1px solid var(--border);border-radius:8px;background:#fff;overflow:hidden}
+.view-btn{border:0;background:transparent;color:var(--muted);padding:7px 12px;font-size:12px;cursor:pointer}
+.view-btn.active{background:#1d4ed8;color:#fff}
+.view-hint{font-size:11px;color:var(--muted)}
 
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
 .kpi-card{background:var(--card);border-radius:10px;padding:16px;box-shadow:var(--shadow);border:1px solid var(--border)}
@@ -69,6 +80,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
 .chart-card{background:var(--card);border-radius:10px;padding:16px;box-shadow:var(--shadow);border:1px solid var(--border)}
 .chart-title{font-size:12px;font-weight:600;margin-bottom:12px}
+.chart-canvas-wrap{position:relative;height:260px;max-height:260px}
+.chart-canvas-wrap canvas{width:100%!important;height:100%!important;max-height:260px!important}
 
 .table-card{background:var(--card);border-radius:10px;box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:20px;overflow:hidden}
 .table-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
@@ -95,6 +108,13 @@ tbody td{padding:8px 12px;white-space:nowrap}
 .win-hi{color:var(--green);font-weight:700}.win-mid{color:var(--orange);font-weight:600}
 .search-input{padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:180px;outline:none}
 .search-input:focus{border-color:var(--accent)}
+@media (max-width:900px){
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .charts-row{grid-template-columns:1fr}
+  .filters-dropdown{min-width:280px}
+  .filters-grid{grid-template-columns:1fr}
+  .chart-canvas-wrap{height:220px;max-height:220px}
+}
 </style>
 </head>
 <body>
@@ -124,40 +144,58 @@ tbody td{padding:8px 12px;white-space:nowrap}
     </div>
   </div>
 
-  <div class="sidebar-filters">
-    <div class="sf-label">Date Range</div>
-    <div class="date-inputs">
-      <input class="date-input" id="date-from" placeholder="From (YYYY-MM)" maxlength="7"/>
-      <input class="date-input" id="date-to" placeholder="To (YYYY-MM)" maxlength="7"/>
-    </div>
-    <div class="sf-label">Region</div>
-    <div class="region-list" id="region-list"></div>
-    <button class="reset-btn" onclick="resetFilters()">↺ Reset filters</button>
-  </div>
   <div class="sidebar-footer">Updated 2026-05-14 13:35</div>
 </nav>
 
 <div class="main">
   <div class="topbar">
     <h2 id="section-title">Overview</h2>
-    <div class="filter-summary" id="filter-summary">All regions · All dates</div>
+    <div class="topbar-right">
+      <div class="filter-summary" id="filter-summary">All regions · All dates</div>
+      <div class="filters-menu">
+        <button class="filters-btn" onclick="toggleFiltersMenu()" id="filters-toggle">Filters</button>
+        <div class="filters-dropdown" id="filters-dropdown">
+          <div class="filters-grid">
+            <div>
+              <div class="sf-label">Date Range</div>
+              <div class="date-inputs">
+                <input class="top-filter-input" id="date-from" placeholder="From (YYYY-MM)" maxlength="7"/>
+                <input class="top-filter-input" id="date-to" placeholder="To (YYYY-MM)" maxlength="7"/>
+              </div>
+            </div>
+            <div>
+              <div class="sf-label">Region</div>
+              <div class="region-list" id="region-list"></div>
+            </div>
+          </div>
+          <button class="reset-btn" onclick="resetFilters()">Reset filters</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="content">
     <!-- OVERVIEW -->
     <div id="sec-overview" class="section active">
+      <div class="view-toggle">
+        <div class="view-toggle-group">
+          <button class="view-btn active" id="view-api-first" onclick="setPerspective('api-first')">API-first</button>
+          <button class="view-btn" id="view-hubspot-first" onclick="setPerspective('hubspot-first')">HubSpot-first</button>
+        </div>
+        <div class="view-hint" id="view-hint">Primary lens: Meta/LinkedIn API data, crossed with HubSpot funnel.</div>
+      </div>
       <div class="kpi-grid" id="kpi-grid"></div>
       <div style="background:var(--card);border-radius:10px;padding:20px;box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:20px">
-        <div class="chart-title">Conversion Funnel</div>
+        <div class="chart-title" id="funnel-title">Conversion Funnel</div>
         <div id="funnel-chart"></div>
       </div>
       <div class="charts-row">
-        <div class="chart-card"><div class="chart-title">Leads by Channel</div><canvas id="channelChart" height="220"></canvas></div>
-        <div class="chart-card"><div class="chart-title">MRR Won vs MRR Validated by Channel</div><canvas id="mrrChart" height="220"></canvas></div>
+        <div class="chart-card"><div class="chart-title" id="chart-title-a">Leads by Channel</div><div class="chart-canvas-wrap"><canvas id="channelChart"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title" id="chart-title-b">MRR Won vs MRR Validated by Channel</div><div class="chart-canvas-wrap"><canvas id="mrrChart"></canvas></div></div>
       </div>
       <div class="charts-row">
-        <div class="chart-card"><div class="chart-title">Leads by Month</div><canvas id="monthChart" height="200"></canvas></div>
-        <div class="chart-card"><div class="chart-title">Paid Spend by Channel (USD)</div><canvas id="spendChart" height="200"></canvas></div>
+        <div class="chart-card"><div class="chart-title" id="chart-title-c">Leads by Month</div><div class="chart-canvas-wrap"><canvas id="monthChart"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title" id="chart-title-d">Paid Spend by Channel (USD)</div><div class="chart-canvas-wrap"><canvas id="spendChart"></canvas></div></div>
       </div>
     </div>
 
@@ -242,7 +280,7 @@ const RAW = {"meta": {"generated_at": "2026-05-14 14:55", "period": "2026"}, "re
 let selRegions = new Set(RAW.regions);
 let dateFrom = RAW.months[0];
 let dateTo = RAW.months[RAW.months.length-1];
-let campFilter = '';
+let dataPerspective = 'api-first';
 let sortStates = {};
 let charts = {};
 
@@ -261,6 +299,26 @@ const dt = document.getElementById('date-to');
 df.value = dateFrom; dt.value = dateTo;
 df.addEventListener('change', e => { if(e.target.value.match(/^\d{4}-\d{2}$/)){dateFrom=e.target.value;renderAll();} });
 dt.addEventListener('change', e => { if(e.target.value.match(/^\d{4}-\d{2}$/)){dateTo=e.target.value;renderAll();} });
+
+function toggleFiltersMenu() {
+  document.getElementById('filters-dropdown').classList.toggle('open');
+}
+
+document.addEventListener('click', e => {
+  const menu = document.querySelector('.filters-menu');
+  if (!menu || menu.contains(e.target)) return;
+  document.getElementById('filters-dropdown').classList.remove('open');
+});
+
+function setPerspective(mode) {
+  dataPerspective = mode;
+  document.getElementById('view-api-first').classList.toggle('active', mode === 'api-first');
+  document.getElementById('view-hubspot-first').classList.toggle('active', mode === 'hubspot-first');
+  document.getElementById('view-hint').textContent = mode === 'api-first'
+    ? 'Primary lens: Meta/LinkedIn API data, crossed with HubSpot funnel.'
+    : 'Primary lens: HubSpot funnel outcomes, enriched with paid API spend.';
+  renderAll();
+}
 
 function toggleRegion(r, checked) {
   if(checked) selRegions.add(r); else selRegions.delete(r);
@@ -316,6 +374,35 @@ function aggregateByChannel(camps) {
     deal_rate: c.leads?Math.round(c.deals/c.leads*1000)/10:0,
     cpl: c.spend>0&&c.leads>0?Math.round(c.spend/c.leads):null,
   })).sort((a,b)=>b.leads-a.leads);
+}
+
+function apiSourceFromCampaignChannel(campaign, channel) {
+  const ch = String(channel || '').toLowerCase();
+  const c = String(campaign || '').toLowerCase();
+  if (ch.includes('linkedin') || c.includes('lnkdn') || c.includes('lnknd')) return 'LinkedIn API';
+  if (ch.includes('facebook') || c.startsWith('meta ') || c.startsWith('meta /') || c.includes('leadscampaign-')) return 'Meta API';
+  return 'HubSpot / Other';
+}
+
+function aggregateByApiSource(camps) {
+  const map = {};
+  camps.forEach(c => {
+    const source = apiSourceFromCampaignChannel(c.campaign, c.channel);
+    if (!map[source]) map[source] = {source, leads:0, deals:0, validated:0, won:0, mrr_won:0, mrr_validated:0, spend:0};
+    map[source].leads += c.leads;
+    map[source].deals += c.deals;
+    map[source].validated += c.validated;
+    map[source].won += c.won;
+    map[source].mrr_won += c.mrr_won;
+    map[source].mrr_validated += c.mrr_validated;
+    map[source].spend += c.spend;
+  });
+  return Object.values(map).map(s => ({
+    ...s,
+    win_rate: s.leads ? Math.round(s.won / s.leads * 1000) / 10 : 0,
+    deal_rate: s.leads ? Math.round(s.deals / s.leads * 1000) / 10 : 0,
+    cpl: s.spend > 0 && s.leads > 0 ? Math.round(s.spend / s.leads) : null,
+  })).sort((a,b) => b.spend - a.spend || b.leads - a.leads);
 }
 
 function aggregateByMonth(records) {
@@ -397,30 +484,62 @@ function renderTotals(tbody, rows, defs) {
 }
 
 function renderKPIs(camps) {
-  const leads=camps.reduce((a,c)=>a+c.leads,0);
-  const deals=camps.reduce((a,c)=>a+c.deals,0);
-  const validated=camps.reduce((a,c)=>a+c.validated,0);
-  const won=camps.reduce((a,c)=>a+c.won,0);
-  const mrrWon=camps.reduce((a,c)=>a+c.mrr_won,0);
-  const mrrVal=camps.reduce((a,c)=>a+c.mrr_validated,0);
-  const spend=camps.reduce((a,c)=>a+c.spend,0);
+  const leads = camps.reduce((a,c)=>a+c.leads,0);
+  const deals = camps.reduce((a,c)=>a+c.deals,0);
+  const validated = camps.reduce((a,c)=>a+c.validated,0);
+  const won = camps.reduce((a,c)=>a+c.won,0);
+  const mrrWon = camps.reduce((a,c)=>a+c.mrr_won,0);
+  const mrrVal = camps.reduce((a,c)=>a+c.mrr_validated,0);
+  const apiRows = aggregateByApiSource(camps).filter(r => r.source !== 'HubSpot / Other');
+  const apiSpend = apiRows.reduce((a,r)=>a+r.spend,0);
+  const apiLeads = apiRows.reduce((a,r)=>a+r.leads,0);
+  const apiDeals = apiRows.reduce((a,r)=>a+r.deals,0);
+  const apiWon = apiRows.reduce((a,r)=>a+r.won,0);
+
+  if (dataPerspective === 'api-first') {
+    document.getElementById('kpi-grid').innerHTML=`
+      <div class="kpi-card"><div class="kpi-label">API Spend</div><div class="kpi-value" style="color:var(--purple)">${fmtUSD(apiSpend)}</div><div class="kpi-sub">Meta + LinkedIn</div></div>
+      <div class="kpi-card"><div class="kpi-label">API Leads</div><div class="kpi-value">${fmt(apiLeads)}</div><div class="kpi-sub">Leads tied to paid API campaigns</div></div>
+      <div class="kpi-card"><div class="kpi-label">API Deals</div><div class="kpi-value">${fmt(apiDeals)}</div><div class="kpi-sub">${apiLeads?Math.round(apiDeals/apiLeads*10)/10:0}% lead → deal</div></div>
+      <div class="kpi-card"><div class="kpi-label">API Won</div><div class="kpi-value">${fmt(apiWon)}</div><div class="kpi-sub">${apiLeads?Math.round(apiWon/apiLeads*10)/10:0}% lead → won</div></div>
+      <div class="kpi-card"><div class="kpi-label">API CPL</div><div class="kpi-value" style="color:var(--orange)">${apiSpend>0&&apiLeads>0?fmtUSD(Math.round(apiSpend/apiLeads)):'—'}</div><div class="kpi-sub">Cost per lead</div></div>
+      <div class="kpi-card"><div class="kpi-label">HubSpot Validated</div><div class="kpi-value">${fmt(validated)}</div><div class="kpi-sub">Validated after API acquisition</div></div>
+      <div class="kpi-card"><div class="kpi-label">MRR Won</div><div class="kpi-value" style="color:var(--green)">${fmtUSD(mrrWon)}</div><div class="kpi-sub">Closed won pipeline</div></div>
+      <div class="kpi-card"><div class="kpi-label">MRR Validated</div><div class="kpi-value" style="color:var(--accent)">${fmtUSD(mrrVal)}</div><div class="kpi-sub">Validated HubSpot pipeline</div></div>
+    `;
+    return;
+  }
+
+  const spend = camps.reduce((a,c)=>a+c.spend,0);
   document.getElementById('kpi-grid').innerHTML=`
-    <div class="kpi-card"><div class="kpi-label">Leads</div><div class="kpi-value">${fmt(leads)}</div><div class="kpi-sub">BOFU form fills</div></div>
+    <div class="kpi-card"><div class="kpi-label">Leads</div><div class="kpi-value">${fmt(leads)}</div><div class="kpi-sub">HubSpot BOFU form fills</div></div>
     <div class="kpi-card"><div class="kpi-label">Deals Created</div><div class="kpi-value">${fmt(deals)}</div><div class="kpi-sub">${leads?Math.round(deals/leads*10)/10:0}% of leads</div></div>
     <div class="kpi-card"><div class="kpi-label">Validated</div><div class="kpi-value">${fmt(validated)}</div><div class="kpi-sub">${leads?Math.round(validated/leads*10)/10:0}% of leads</div></div>
     <div class="kpi-card"><div class="kpi-label">Won</div><div class="kpi-value">${fmt(won)}</div><div class="kpi-sub">${leads?Math.round(won/leads*10)/10:0}% win rate</div></div>
     <div class="kpi-card"><div class="kpi-label">MRR Won</div><div class="kpi-value" style="color:var(--green)">${fmtUSD(mrrWon)}</div><div class="kpi-sub">Avg ${won?fmtUSD(Math.round(mrrWon/won)):'—'}/deal</div></div>
     <div class="kpi-card"><div class="kpi-label">MRR Validated</div><div class="kpi-value" style="color:var(--accent)">${fmtUSD(mrrVal)}</div><div class="kpi-sub">Active pipeline</div></div>
-    <div class="kpi-card"><div class="kpi-label">Paid Spend</div><div class="kpi-value" style="color:var(--purple)">${fmtUSD(spend)}</div><div class="kpi-sub">LinkedIn + Meta · USD</div></div>
+    <div class="kpi-card"><div class="kpi-label">Paid API Spend</div><div class="kpi-value" style="color:var(--purple)">${fmtUSD(spend)}</div><div class="kpi-sub">Crossed with HubSpot outcomes</div></div>
     <div class="kpi-card"><div class="kpi-label">Avg CPL (paid)</div><div class="kpi-value" style="color:var(--orange)">${spend>0&&leads>0?fmtUSD(Math.round(spend/leads)):'—'}</div><div class="kpi-sub">Paid leads only</div></div>
   `;
 }
 
 function renderFunnel(camps) {
-  const leads=camps.reduce((a,c)=>a+c.leads,0);
-  const deals=camps.reduce((a,c)=>a+c.deals,0);
-  const validated=camps.reduce((a,c)=>a+c.validated,0);
-  const won=camps.reduce((a,c)=>a+c.won,0);
+  let leads = camps.reduce((a,c)=>a+c.leads,0);
+  let deals = camps.reduce((a,c)=>a+c.deals,0);
+  let validated = camps.reduce((a,c)=>a+c.validated,0);
+  let won = camps.reduce((a,c)=>a+c.won,0);
+  let title = 'HubSpot Funnel (All Sources)';
+
+  if (dataPerspective === 'api-first') {
+    const apiRows = aggregateByApiSource(camps).filter(r => r.source !== 'HubSpot / Other');
+    leads = apiRows.reduce((a,r)=>a+r.leads,0);
+    deals = apiRows.reduce((a,r)=>a+r.deals,0);
+    validated = apiRows.reduce((a,r)=>a+r.validated,0);
+    won = apiRows.reduce((a,r)=>a+r.won,0);
+    title = 'API-to-HubSpot Funnel (Meta / LinkedIn)';
+  }
+  document.getElementById('funnel-title').textContent = title;
+
   const items=[{l:'Leads',v:leads,c:'#3b82f6'},{l:'Deals',v:deals,c:'#8b5cf6'},{l:'Validated',v:validated,c:'#f59e0b'},{l:'Won',v:won,c:'#10b981'}];
   document.getElementById('funnel-chart').innerHTML=items.map(i=>`
     <div class="funnel-row">
@@ -432,18 +551,40 @@ function renderFunnel(camps) {
 }
 
 function renderCharts(camps, records) {
+  const mkChart = (id, cfg) => { if(charts[id]) charts[id].destroy(); charts[id]=new Chart(document.getElementById(id),cfg); };
+
+  if (dataPerspective === 'api-first') {
+    const src = aggregateByApiSource(camps).filter(r => r.source !== 'HubSpot / Other');
+    const labels = src.map(r => r.source.replace(' API',''));
+    const apiRecords = records.filter(r => apiSourceFromCampaignChannel(r.campaign, r.channel) !== 'HubSpot / Other');
+    const byMonth = aggregateByMonth(apiRecords);
+
+    document.getElementById('chart-title-a').textContent = 'API Spend by Source (USD)';
+    document.getElementById('chart-title-b').textContent = 'HubSpot Outcomes by API Source';
+    document.getElementById('chart-title-c').textContent = 'API-Sourced Leads by Month';
+    document.getElementById('chart-title-d').textContent = 'MRR by API Source';
+
+    mkChart('channelChart',{type:'bar',data:{labels,datasets:[{label:'Spend',data:src.map(r=>Math.round(r.spend)),backgroundColor:'#8b5cf680',borderColor:'#8b5cf6',borderWidth:1,borderRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#f1f5f9'}},x:{grid:{display:false}}},maintainAspectRatio:false}});
+    mkChart('mrrChart',{type:'bar',data:{labels,datasets:[{label:'Leads',data:src.map(r=>r.leads),backgroundColor:'#3b82f680',borderColor:'#3b82f6',borderWidth:1,borderRadius:4},{label:'Deals',data:src.map(r=>r.deals),backgroundColor:'#10b98170',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'Won',data:src.map(r=>r.won),backgroundColor:'#f59e0b70',borderColor:'#f59e0b',borderWidth:1,borderRadius:4}]},options:{plugins:{legend:{position:'top',labels:{font:{size:11}}}},scales:{y:{beginAtZero:true,grid:{color:'#f1f5f9'}},x:{grid:{display:false}}},maintainAspectRatio:false}});
+    mkChart('monthChart',{type:'line',data:{labels:byMonth.map(m=>m.month),datasets:[{label:'API-sourced leads',data:byMonth.map(m=>m.leads),borderColor:'#3b82f6',backgroundColor:'#3b82f620',fill:true,tension:.3,pointRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#f1f5f9'}},x:{grid:{display:false}}},maintainAspectRatio:false}});
+    mkChart('spendChart',{type:'bar',data:{labels,datasets:[{label:'MRR Won',data:src.map(r=>Math.round(r.mrr_won)),backgroundColor:'#10b98180',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'MRR Validated',data:src.map(r=>Math.round(r.mrr_validated)),backgroundColor:'#3b82f640',borderColor:'#3b82f6',borderWidth:1,borderRadius:4}]},options:{plugins:{legend:{position:'top',labels:{font:{size:11}}}},scales:{y:{beginAtZero:true,grid:{color:'#f1f5f9'}},x:{grid:{display:false}}},maintainAspectRatio:false}});
+    return;
+  }
+
   const chs = aggregateByChannel(camps).slice(0,8);
   const labels = chs.map(c=>c.channel.replace('Paid Social — ','').replace('Paid Search — ',''));
-  const mkChart = (id, cfg) => { if(charts[id]) charts[id].destroy(); charts[id]=new Chart(document.getElementById(id),cfg); };
+  const byMonth = aggregateByMonth(records);
+  const paid = chs.filter(c=>c.spend>0);
+
+  document.getElementById('chart-title-a').textContent = 'Leads by Channel';
+  document.getElementById('chart-title-b').textContent = 'MRR Won vs MRR Validated by Channel';
+  document.getElementById('chart-title-c').textContent = 'Leads by Month';
+  document.getElementById('chart-title-d').textContent = 'Paid Spend by Channel (USD)';
 
   mkChart('channelChart',{type:'bar',data:{labels,datasets:[{label:'Leads',data:chs.map(c=>c.leads),backgroundColor:'#3b82f680',borderColor:'#3b82f6',borderWidth:1,borderRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#f1f5f9'}},x:{grid:{display:false}}},maintainAspectRatio:false}});
   mkChart('mrrChart',{type:'bar',data:{labels,datasets:[{label:'MRR Won',data:chs.map(c=>c.mrr_won),backgroundColor:'#10b98180',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'MRR Validated',data:chs.map(c=>c.mrr_validated),backgroundColor:'#3b82f640',borderColor:'#3b82f6',borderWidth:1,borderRadius:4}]},options:{plugins:{legend:{position:'top',labels:{font:{size:11}}}},scales:{y:{beginAtZero:true,grid:{color:'#f1f5f9'}},x:{grid:{display:false}}},maintainAspectRatio:false}});
-
-  const byMonth = aggregateByMonth(records);
   mkChart('monthChart',{type:'line',data:{labels:byMonth.map(m=>m.month),datasets:[{label:'Leads',data:byMonth.map(m=>m.leads),borderColor:'#3b82f6',backgroundColor:'#3b82f620',fill:true,tension:.3,pointRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#f1f5f9'}},x:{grid:{display:false}}},maintainAspectRatio:false}});
-
-  const paid=chs.filter(c=>c.spend>0);
-  if(paid.length) mkChart('spendChart',{type:'doughnut',data:{labels:paid.map(c=>c.channel.replace('Paid Social — ','').replace('Paid Search — ','')),datasets:[{data:paid.map(c=>c.spend),backgroundColor:['#3b82f6','#8b5cf6','#f59e0b','#10b981'],borderWidth:2,borderColor:'#fff'}]},options:{plugins:{legend:{position:'right',labels:{font:{size:11}}}},maintainAspectRatio:false}});
+  mkChart('spendChart',{type:'doughnut',data:{labels:paid.map(c=>c.channel.replace('Paid Social — ','').replace('Paid Search — ','')),datasets:[{data:paid.map(c=>c.spend),backgroundColor:['#3b82f6','#8b5cf6','#f59e0b','#10b981'],borderWidth:2,borderColor:'#fff'}]},options:{plugins:{legend:{position:'right',labels:{font:{size:11}}}},maintainAspectRatio:false}});
 }
 
 function renderChannelTable(camps) {
@@ -471,7 +612,7 @@ function filterCamps(v){ campFilterText=v.toLowerCase(); renderAll(); }
 
 function renderCampaignTable(camps) {
   let rows = camps;
-  if(campFilterText) rows=rows.filter(r=>r.campaign.toLowerCase().includes(campFilterText)||r.channel.toLowerCase().includes(campFilterText));
+  if(campFilterText) rows=rows.filter(r=>r.campaign.toLowerCase().includes(campFilterText));
   const tbody = document.getElementById('camp-tbody');
   if(!rows.length){tbody.innerHTML='<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--muted)">No results</td></tr>';return;}
   tbody.innerHTML = rows.map(c=>`<tr>
