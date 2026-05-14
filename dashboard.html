@@ -1,467 +1,564 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Marketing Leads Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --sidebar-bg: #0f172a; --accent: #3b82f6; --bg: #f1f5f9;
-      --card: #fff; --text: #0f172a; --muted: #64748b; --border: #e2e8f0;
-      --shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
-    #app { display: flex; height: 100vh; overflow: hidden; }
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Inbound Dashboard — 2026</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f4f8;--sidebar:#0f172a;--card:#fff;--accent:#3b82f6;
+  --green:#10b981;--orange:#f59e0b;--purple:#8b5cf6;--red:#ef4444;
+  --text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+#app{display:flex;height:100vh;overflow:hidden}
 
-    /* SIDEBAR */
-    .sidebar { width: 220px; min-width: 220px; background: var(--sidebar-bg); display: flex; flex-direction: column; }
-    .sidebar-header { padding: 24px 20px; border-bottom: 1px solid #1e293b; }
-    .sidebar-header h2 { font-size: 15px; font-weight: 700; color: #fff; }
-    .sidebar-header p { font-size: 11px; color: #64748b; margin-top: 2px; }
-    .sidebar-nav { padding: 12px; flex: 1; }
-    .nav-item {
-      display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-      border-radius: 8px; cursor: pointer; color: #94a3b8; font-size: 13px; font-weight: 500;
-      transition: background 0.15s, color 0.15s; margin-bottom: 2px;
-    }
-    .nav-item:hover { background: #1e293b; color: #e2e8f0; }
-    .nav-item.active { background: var(--accent); color: #fff; }
-    .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.sidebar{width:210px;min-width:210px;background:var(--sidebar);display:flex;flex-direction:column;overflow-y:auto}
+.logo{padding:20px 16px 16px;border-bottom:1px solid #1e293b}
+.logo h1{font-size:13px;font-weight:700;color:#fff;letter-spacing:.02em}
+.logo p{font-size:11px;color:#475569;margin-top:3px}
+.nav{padding:10px 8px;flex:1}
+.nav-section{font-size:10px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.08em;padding:12px 8px 6px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:6px;cursor:pointer;color:#94a3b8;font-size:12px;font-weight:500;transition:background .12s,color .12s;margin-bottom:1px}
+.nav-item:hover{background:#1e293b;color:#e2e8f0}
+.nav-item.active{background:#1d4ed8;color:#fff}
+.nav-item svg{width:15px;height:15px;flex-shrink:0}
 
-    /* MAIN */
-    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    .topbar {
-      background: var(--card); border-bottom: 1px solid var(--border);
-      padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0;
-    }
-    .topbar h1 { font-size: 17px; font-weight: 700; }
-    .topbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .date-input { padding: 7px 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 13px; outline: none; cursor: pointer; background: #fff; min-width: 200px; }
-    .btn-primary { padding: 7px 16px; background: var(--accent); color: #fff; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
-    .btn-primary:hover { background: #2563eb; }
-    .btn-secondary { padding: 7px 12px; background: transparent; color: var(--muted); border: 1.5px solid var(--border); border-radius: 7px; font-size: 13px; cursor: pointer; }
+.sidebar-filters{padding:10px 12px;border-top:1px solid #1e293b}
+.sf-label{font-size:10px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;margin-top:10px}
+.sf-label:first-child{margin-top:0}
+.region-list{display:flex;flex-direction:column;gap:3px;max-height:200px;overflow-y:auto}
+.region-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;color:#94a3b8;font-size:11px;transition:background .1s}
+.region-item:hover{background:#1e293b}
+.region-item input{accent-color:#3b82f6;cursor:pointer}
+.region-item.checked{color:#e2e8f0}
+.date-inputs{display:flex;flex-direction:column;gap:6px}
+.date-input{width:100%;padding:5px 8px;border:1px solid #334155;border-radius:5px;background:#1e293b;color:#e2e8f0;font-size:11px;outline:none}
+.date-input:focus{border-color:#3b82f6}
+.reset-btn{width:100%;margin-top:10px;padding:6px;border-radius:5px;border:1px solid #334155;background:transparent;color:#64748b;font-size:11px;cursor:pointer;transition:all .12s}
+.reset-btn:hover{border-color:#3b82f6;color:#93c5fd}
+.sidebar-footer{padding:10px 16px;border-top:1px solid #1e293b;font-size:10px;color:#475569}
 
-    .content { flex: 1; overflow-y: auto; padding: 24px; }
-    .section { display: none; }
-    .section.active { display: block; }
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.topbar{background:var(--card);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.topbar h2{font-size:15px;font-weight:700}
+.filter-summary{font-size:11px;color:var(--muted);background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:4px 10px}
 
-    /* KPI */
-    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .kpi-card { background: var(--card); border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow); border: 1px solid var(--border); position: relative; overflow: hidden; }
-    .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--accent); }
-    .kpi-card.green::before { background: #10b981; }
-    .kpi-card.purple::before { background: #8b5cf6; }
-    .kpi-card.orange::before { background: #f59e0b; }
-    .kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #94a3b8; }
-    .kpi-value { font-size: 28px; font-weight: 800; margin: 6px 0 2px; line-height: 1; }
-    .kpi-sub { font-size: 11px; color: var(--muted); }
+.content{padding:20px 24px;flex:1}
+.section{display:none}
+.section.active{display:block}
 
-    /* CHARTS */
-    .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 20px; margin-bottom: 24px; }
-    .chart-grid.single { grid-template-columns: 1fr; }
-    .chart-card { background: var(--card); border-radius: 12px; padding: 20px 22px; box-shadow: var(--shadow); border: 1px solid var(--border); }
-    .chart-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
-    .chart-sub { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
-    .chart-wrap canvas { max-height: 300px; }
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.kpi-card{background:var(--card);border-radius:10px;padding:16px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.kpi-label{font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.kpi-value{font-size:24px;font-weight:700;letter-spacing:-.02em}
+.kpi-sub{font-size:11px;color:var(--muted);margin-top:4px}
 
-    /* FILTER */
-    .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-    .filter-bar label { font-size: 12px; font-weight: 600; color: var(--muted); }
-    .filter-select { padding: 7px 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 13px; background: #fff; outline: none; cursor: pointer; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #eff6ff; color: var(--accent); }
+.funnel-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.funnel-label{width:90px;font-size:11px;color:var(--muted);text-align:right}
+.funnel-bar-wrap{flex:1;background:#f1f5f9;border-radius:4px;height:28px;overflow:hidden}
+.funnel-bar{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:10px;font-size:12px;font-weight:600;color:#fff}
+.funnel-count{width:60px;font-size:12px;font-weight:600}
+.funnel-pct{width:80px;font-size:11px;color:var(--muted)}
 
-    /* LOADER */
-    .loader { position: fixed; inset: 0; background: rgba(255,255,255,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; gap: 12px; }
-    .spinner { width: 40px; height: 40px; border: 4px solid #e2e8f0; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .loader-text { font-size: 14px; font-weight: 600; color: var(--muted); }
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.chart-card{background:var(--card);border-radius:10px;padding:16px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.chart-title{font-size:12px;font-weight:600;margin-bottom:12px}
 
-    @media (max-width: 768px) {
-      .sidebar { width: 56px; min-width: 56px; }
-      .sidebar-header h2, .sidebar-header p, .nav-item span { display: none; }
-      .nav-item { justify-content: center; }
-      .chart-grid { grid-template-columns: 1fr; }
-    }
-  </style>
+.table-card{background:var(--card);border-radius:10px;box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:20px;overflow:hidden}
+.table-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.table-header h3{font-size:13px;font-weight:600}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{background:#f8fafc;padding:8px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none}
+thead th:hover{background:#f1f5f9;color:var(--text)}
+thead th.sort-asc::after{content:" ↑"}thead th.sort-desc::after{content:" ↓"}
+tbody tr{border-bottom:1px solid #f8fafc;transition:background .1s}
+tbody tr:hover{background:#f8fafc}
+tbody tr.totals-row{background:#f1f5f9;font-weight:700;border-top:2px solid var(--border);position:sticky;bottom:0}
+tbody tr.totals-row td{color:var(--text)}
+tbody td{padding:8px 12px;white-space:nowrap}
+.td-camp{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.td-num{text-align:right;font-variant-numeric:tabular-nums}
+.td-money{text-align:right;font-variant-numeric:tabular-nums;color:var(--green);font-weight:600}
+.td-spend{text-align:right;font-variant-numeric:tabular-nums;color:var(--purple);font-weight:600}
+.td-cpl{text-align:right;font-variant-numeric:tabular-nums;color:var(--orange);font-weight:600}
+.pill{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600}
+.pill-li{background:#eff6ff;color:#1d4ed8}.pill-fb{background:#fdf4ff;color:#7c3aed}
+.pill-goog{background:#fef9c3;color:#854d0e}.pill-direct{background:#f0fdf4;color:#166534}
+.pill-organic{background:#ecfdf5;color:#065f46}.pill-other{background:#f1f5f9;color:#475569}
+.win-hi{color:var(--green);font-weight:700}.win-mid{color:var(--orange);font-weight:600}
+.search-input{padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:180px;outline:none}
+.search-input:focus{border-color:var(--accent)}
+</style>
 </head>
 <body>
 <div id="app">
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <h2>Leads Analytics</h2>
-      <p>Humand Marketing</p>
+<nav class="sidebar">
+  <div class="logo">
+    <h1>Inbound Dashboard</h1>
+    <p>All Regions · 2026</p>
+  </div>
+  <div class="nav">
+    <div class="nav-section">Views</div>
+    <div class="nav-item active" onclick="showSection('overview',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 4a2 2 0 012-2h3a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4zm7 2a2 2 0 012-2h3a2 2 0 012 2v7a2 2 0 01-2 2h-3a2 2 0 01-2-2V6zm7 6a2 2 0 012-2h1v6h-1a2 2 0 01-2-2v-2z"/></svg>
+      Overview
     </div>
-    <nav class="sidebar-nav">
-      <div class="nav-item active" onclick="showSection(this,'resumen')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-        <span>Resumen General</span>
-      </div>
-      <div class="nav-item" onclick="showSection(this,'campana')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-        <span>Por Campana</span>
-      </div>
-      <div class="nav-item" onclick="showSection(this,'calidad')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        <span>Por Calidad</span>
-      </div>
-      <div class="nav-item" onclick="showSection(this,'empresa')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        <span>Por Empresa</span>
-      </div>
-      <div class="nav-item" onclick="showSection(this,'formulario')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        <span>Por Formulario</span>
-      </div>
-    </nav>
-  </aside>
+    <div class="nav-item" onclick="showSection('channels',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z"/></svg>
+      By Channel
+    </div>
+    <div class="nav-item" onclick="showSection('campaigns',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5z" clip-rule="evenodd"/></svg>
+      By Campaign
+    </div>
+    <div class="nav-item" onclick="showSection('paid',this)">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z"/><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clip-rule="evenodd"/></svg>
+      Paid Analysis
+    </div>
+  </div>
 
-  <main class="main">
-    <div class="topbar">
-      <h1 id="section-title">Resumen General</h1>
-      <div class="topbar-right">
-        <input type="text" id="date-range" class="date-input" placeholder="Filtrar por periodo" readonly />
-        <button class="btn-primary" onclick="applyFilter()">Aplicar</button>
-        <button class="btn-secondary" onclick="clearFilter()">Limpiar</button>
+  <div class="sidebar-filters">
+    <div class="sf-label">Date Range</div>
+    <div class="date-inputs">
+      <input class="date-input" id="date-from" placeholder="From (YYYY-MM)" maxlength="7"/>
+      <input class="date-input" id="date-to" placeholder="To (YYYY-MM)" maxlength="7"/>
+    </div>
+    <div class="sf-label">Region</div>
+    <div class="region-list" id="region-list"></div>
+    <button class="reset-btn" onclick="resetFilters()">↺ Reset filters</button>
+  </div>
+  <div class="sidebar-footer">Updated 2026-05-14 13:35</div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <h2 id="section-title">Overview</h2>
+    <div class="filter-summary" id="filter-summary">All regions · All dates</div>
+  </div>
+
+  <div class="content">
+    <!-- OVERVIEW -->
+    <div id="sec-overview" class="section active">
+      <div class="kpi-grid" id="kpi-grid"></div>
+      <div style="background:var(--card);border-radius:10px;padding:20px;box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:20px">
+        <div class="chart-title">Conversion Funnel</div>
+        <div id="funnel-chart"></div>
+      </div>
+      <div class="charts-row">
+        <div class="chart-card"><div class="chart-title">Leads by Channel</div><canvas id="channelChart" height="220"></canvas></div>
+        <div class="chart-card"><div class="chart-title">MRR Won vs MRR Validated by Channel</div><canvas id="mrrChart" height="220"></canvas></div>
+      </div>
+      <div class="charts-row">
+        <div class="chart-card"><div class="chart-title">Leads by Month</div><canvas id="monthChart" height="200"></canvas></div>
+        <div class="chart-card"><div class="chart-title">Paid Spend by Channel (USD)</div><canvas id="spendChart" height="200"></canvas></div>
       </div>
     </div>
 
-    <div class="content">
-      <!-- RESUMEN -->
-      <div class="section active" id="section-resumen">
-        <div class="kpi-grid">
-          <div class="kpi-card"><div class="kpi-label">Total Leads</div><div class="kpi-value" id="kpi-total">--</div><div class="kpi-sub">En el periodo</div></div>
-          <div class="kpi-card green"><div class="kpi-label">Leads Este Mes</div><div class="kpi-value" id="kpi-mes">--</div><div class="kpi-sub" id="kpi-mes-label">Mes actual</div></div>
-          <div class="kpi-card purple"><div class="kpi-label">Leads Mes Anterior</div><div class="kpi-value" id="kpi-prev">--</div><div class="kpi-sub" id="kpi-prev-label">Mes anterior</div></div>
-          <div class="kpi-card orange"><div class="kpi-label">Fuentes Activas</div><div class="kpi-value" id="kpi-fuentes">--</div><div class="kpi-sub">Canales</div></div>
-        </div>
-        <div class="chart-grid">
-          <div class="chart-card">
-            <div class="chart-title">Leads por Mes</div>
-            <div class="chart-sub">Tendencia mensual (excl. OFFLINE)</div>
-            <div class="chart-wrap"><canvas id="chart-mes"></canvas></div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-title">Leads por Fuente</div>
-            <div class="chart-sub">Distribucion por canal</div>
-            <div class="chart-wrap"><canvas id="chart-fuente"></canvas></div>
-          </div>
-        </div>
+    <!-- CHANNELS -->
+    <div id="sec-channels" class="section">
+      <div class="table-card">
+        <div class="table-header"><h3>By Channel</h3></div>
+        <div class="table-wrap"><table id="ch-table">
+          <thead><tr>
+            <th onclick="sortTable('ch-table',0)">Channel</th>
+            <th onclick="sortTable('ch-table',1)">Leads</th>
+            <th onclick="sortTable('ch-table',2)">Deals</th>
+            <th onclick="sortTable('ch-table',3)">Deal%</th>
+            <th onclick="sortTable('ch-table',4)">Validated</th>
+            <th onclick="sortTable('ch-table',5)">Won</th>
+            <th onclick="sortTable('ch-table',6)">Win%</th>
+            <th onclick="sortTable('ch-table',7)">MRR Won</th>
+            <th onclick="sortTable('ch-table',8)">MRR Validated</th>
+            <th onclick="sortTable('ch-table',9)">Spend</th>
+            <th onclick="sortTable('ch-table',10)">CPL</th>
+          </tr></thead>
+          <tbody id="ch-tbody"></tbody>
+        </table></div>
       </div>
-
-      <!-- CAMPANA -->
-      <div class="section" id="section-campana">
-        <div class="filter-bar">
-          <label>Fuente:</label>
-          <select class="filter-select" id="filter-fuente" onchange="renderCampana()">
-            <option value="">Todas</option>
-            <option value="PAID_SOCIAL">PAID_SOCIAL</option>
-            <option value="PAID_SEARCH">PAID_SEARCH</option>
-            <option value="ORGANIC_SEARCH">ORGANIC_SEARCH</option>
-            <option value="DIRECT_TRAFFIC">DIRECT_TRAFFIC</option>
-            <option value="REFERRALS">REFERRALS</option>
-            <option value="EMAIL_MARKETING">EMAIL_MARKETING</option>
-            <option value="OTHER_CAMPAIGNS">OTHER_CAMPAIGNS</option>
-            <option value="SOCIAL_MEDIA">SOCIAL_MEDIA</option>
-          </select>
-          <span class="badge" id="badge-campana"></span>
-        </div>
-        <div class="chart-grid single">
-          <div class="chart-card">
-            <div class="chart-title">Top 20 Campanas</div>
-            <div class="chart-sub">Por volumen de leads</div>
-            <div class="chart-wrap"><canvas id="chart-campana"></canvas></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- CALIDAD -->
-      <div class="section" id="section-calidad">
-        <div class="chart-grid">
-          <div class="chart-card">
-            <div class="chart-title">Lifecycle Stage</div>
-            <div class="chart-sub">Etapa del funnel de ventas</div>
-            <div class="chart-wrap"><canvas id="chart-lifecycle"></canvas></div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-title">Lead Status</div>
-            <div class="chart-sub">Estado actual del lead</div>
-            <div class="chart-wrap"><canvas id="chart-status"></canvas></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- EMPRESA -->
-      <div class="section" id="section-empresa">
-        <div class="chart-grid">
-          <div class="chart-card">
-            <div class="chart-title">Top 15 Empresas</div>
-            <div class="chart-sub">Por volumen de leads</div>
-            <div class="chart-wrap"><canvas id="chart-empresa"></canvas></div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-title">Tamano de Empresa</div>
-            <div class="chart-sub">Por rango de empleados</div>
-            <div class="chart-wrap"><canvas id="chart-empleados"></canvas></div>
-          </div>
-        </div>
-      </div>
-      <!-- FORMULARIO -->
-      <div class="section" id="section-formulario">
-        <div class="chart-grid single">
-          <div class="chart-card">
-            <div class="chart-title">Leads por Formulario</div>
-            <div class="chart-sub">Solo formularios seleccionados</div>
-            <div class="chart-wrap"><canvas id="chart-formulario"></canvas></div>
-          </div>
-        </div>
-      </div>
-
     </div>
-  </main>
+
+    <!-- CAMPAIGNS -->
+    <div id="sec-campaigns" class="section">
+      <div class="table-card">
+        <div class="table-header">
+          <h3>By Campaign</h3>
+          <input class="search-input" placeholder="Search..." oninput="filterCamps(this.value)" id="camp-search"/>
+        </div>
+        <div class="table-wrap"><table id="camp-table">
+          <thead><tr>
+            <th onclick="sortTable('camp-table',0)">Channel</th>
+            <th onclick="sortTable('camp-table',1)">Campaign</th>
+            <th onclick="sortTable('camp-table',2)">Leads</th>
+            <th onclick="sortTable('camp-table',3)">Deals</th>
+            <th onclick="sortTable('camp-table',4)">Val.</th>
+            <th onclick="sortTable('camp-table',5)">Won</th>
+            <th onclick="sortTable('camp-table',6)">Win%</th>
+            <th onclick="sortTable('camp-table',7)">MRR Won</th>
+            <th onclick="sortTable('camp-table',8)">MRR Val.</th>
+            <th onclick="sortTable('camp-table',9)">Spend</th>
+            <th onclick="sortTable('camp-table',10)">CPL</th>
+          </tr></thead>
+          <tbody id="camp-tbody"></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- PAID -->
+    <div id="sec-paid" class="section">
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px" id="paid-kpis"></div>
+      <div class="table-card">
+        <div class="table-header"><h3>Paid Campaigns — Spend & ROI</h3></div>
+        <div class="table-wrap"><table id="paid-table">
+          <thead><tr>
+            <th onclick="sortTable('paid-table',0)">Channel</th>
+            <th onclick="sortTable('paid-table',1)">Campaign</th>
+            <th onclick="sortTable('paid-table',2)">Leads</th>
+            <th onclick="sortTable('paid-table',3)">Spend (USD)</th>
+            <th onclick="sortTable('paid-table',4)">CPL</th>
+            <th onclick="sortTable('paid-table',5)">Deals</th>
+            <th onclick="sortTable('paid-table',6)">Val.</th>
+            <th onclick="sortTable('paid-table',7)">Won</th>
+            <th onclick="sortTable('paid-table',8)">Win%</th>
+            <th onclick="sortTable('paid-table',9)">MRR Won</th>
+            <th onclick="sortTable('paid-table',10)">MRR Val.</th>
+          </tr></thead>
+          <tbody id="paid-tbody"></tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>
 </div>
-
-<div class="loader" id="loader">
-  <div class="spinner"></div>
-  <div class="loader-text" id="loader-text">Cargando datos...</div>
 </div>
 
 <script>
-const SUPABASE_URL = 'https://xlkmjtvipuokqtlzwluj.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhsa21qdHZpcHVva3F0bHp3bHVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MTI2NDAsImV4cCI6MjA5MjI4ODY0MH0.pa6q75XP-zkI5gDfZxoB309_co5Q5Vg_dc5M-P7YQl8';
-
-const { createClient } = supabase;
-const db = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-const PALETTE = ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444','#06b6d4','#84cc16','#f97316','#ec4899','#6366f1','#14b8a6','#a855f7','#eab308','#22d3ee','#fb923c','#f43f5e','#0ea5e9','#d97706','#65a30d','#7c3aed'];
-
-let rawData = {};
-let dateStart = null;
-let dateEnd = null;
-let currentSection = 'resumen';
+const RAW = {"meta": {"generated_at": "2026-05-14 13:35", "period": "2026"}, "regions": ["APAC", "Brazil", "Centroamerica", "Cono Sur", "EMEA", "HISPAM", "M\u00e9xico & Caribe", "NA and Caribbean", "Spain", "Zona Andina"], "months": ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05"], "records": [{"campaign": "auto-tagged ppc", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 4, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max - [ee.uu] - high", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 3, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "psp_lnknd_lead_gen sponsored messaging partnership - p\u00fablico referral bogota/lima", "channel": "Paid Social \u2014 LinkedIn", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - argentina latam", "channel": "Paid Social \u2014 LinkedIn", "region": "HISPAM", "month": "2026-01", "leads": 7, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 350}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "HISPAM", "month": "2026-01", "leads": 18, "deals": 9, "validated": 6, "won": 1, "mrr_won": 145, "mrr_validated": 2407}, {"campaign": "(organic)", "channel": "Organic Search", "region": "HISPAM", "month": "2026-01", "leads": 4, "deals": 3, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 800}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_desenvolvimento-de-talentos", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-01", "leads": 8, "deals": 5, "validated": 5, "won": 0, "mrr_won": 0, "mrr_validated": 1275}, {"campaign": "trafic-search-brand- [argentina]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 5, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 570}, {"campaign": "trafic-search-competencias- [ee.uu]", "channel": "Paid Search \u2014 Google", "region": "NA and Caribbean", "month": "2026-01", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-humand-modulos- [colombia]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 4, "deals": 4, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 2225}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Brazil", "month": "2026-01", "leads": 14, "deals": 7, "validated": 4, "won": 1, "mrr_won": 100, "mrr_validated": 460}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 3, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - peru latam", "channel": "Paid Social \u2014 LinkedIn", "region": "HISPAM", "month": "2026-01", "leads": 4, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [peru]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 2, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_display_interests", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-01", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-humand-modulos- [ee.uu]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "help.humand.co", "channel": "Referrals", "region": "HISPAM", "month": "2026-01", "leads": 3, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "search-humand-modulos- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-competencias - [colombia]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "NA and Caribbean", "month": "2026-01", "leads": 6, "deals": 5, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 60}, {"campaign": "lnkdn_lead_gen brasil [bofu] - imagen unica - audience rh + ci", "channel": "Paid Social \u2014 LinkedIn", "region": "Brazil", "month": "2026-01", "leads": 7, "deals": 3, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 1480}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - colombia latam", "channel": "Paid Social \u2014 LinkedIn", "region": "HISPAM", "month": "2026-01", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-competencias- [mexico]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 225}, {"campaign": "leads-performance max- [peru]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1040}, {"campaign": "conversion-search-brand - [colombia]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 2, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 2490}, {"campaign": "leads-performance max - [ee.uu] - high", "channel": "Paid Search \u2014 Google", "region": "NA and Caribbean", "month": "2026-01", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-general- [colombia]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [ee.uu]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen sponsored_messaging_leads[bofu]_portugal_emea", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-01", "leads": 11, "deals": 4, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 1210}, {"campaign": "trafic-search-general- [mexico]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 2100}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_general", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-01", "leads": 6, "deals": 4, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 3015}, {"campaign": "statics.teams.cdn.office.net", "channel": "Referrals", "region": "NA and Caribbean", "month": "2026-01", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "search-humand-modulos-- [argentina]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 900}, {"campaign": "search-humand-modulos- [peru]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 180}, {"campaign": "extension", "channel": "Offline", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "admin.humand.co", "channel": "Referrals", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "search-humand-modulos- [mexico]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 325}, {"campaign": "leads-performance max- [mexico]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Brazil", "month": "2026-01", "leads": 3, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 4050}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_pmax_competitors", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-01", "leads": 8, "deals": 7, "validated": 7, "won": 1, "mrr_won": 480, "mrr_validated": 5060}, {"campaign": "trafic-search-competencias-- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-competencias-- [argentina]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "statics.teams.cdn.office.net", "channel": "Referrals", "region": "Spain", "month": "2026-01", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_pmax_interests", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-01", "leads": 3, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 120}, {"campaign": "lnkdn_lead_gen sponsored messaging [bofu] - leads ireland emea", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-01", "leads": 10, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-01", "leads": 5, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 48}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Zona Andina", "month": "2026-01", "leads": 19, "deals": 15, "validated": 9, "won": 0, "mrr_won": 0, "mrr_validated": 7590}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "M\u00e9xico & Caribe", "month": "2026-01", "leads": 11, "deals": 7, "validated": 7, "won": 0, "mrr_won": 0, "mrr_validated": 4063}, {"campaign": "conversion-search-humand-modulos- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-01", "leads": 11, "deals": 8, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 1210}, {"campaign": "trafic-search-general-arg", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-01", "leads": 9, "deals": 8, "validated": 5, "won": 0, "mrr_won": 0, "mrr_validated": 2700}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - colombia latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Zona Andina", "month": "2026-01", "leads": 20, "deals": 3, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 3500}, {"campaign": "trafic-search-competencias-- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-01", "leads": 4, "deals": 3, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 570}, {"campaign": "search-humand-modulos- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-01", "leads": 6, "deals": 5, "validated": 5, "won": 1, "mrr_won": 400, "mrr_validated": 2950}, {"campaign": "trafic-search-general- [peru]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Centroamerica", "month": "2026-01", "leads": 5, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 1825}, {"campaign": "trafic-search-brand- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-01", "leads": 6, "deals": 4, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 2240}, {"campaign": "search-humand-modulos- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-01", "leads": 9, "deals": 5, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 5540}, {"campaign": "trafic-search-general- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-01", "leads": 5, "deals": 4, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 1055}, {"campaign": "leads-performance max- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-01", "leads": 3, "deals": 3, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 750}, {"campaign": "leads-performance max- [colombia]", "channel": "Paid Search \u2014 Google", "region": "NA and Caribbean", "month": "2026-01", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 400}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - mexico latam", "channel": "Paid Social \u2014 LinkedIn", "region": "M\u00e9xico & Caribe", "month": "2026-01", "leads": 6, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 5562}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - argentina latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Cono Sur", "month": "2026-01", "leads": 28, "deals": 7, "validated": 5, "won": 0, "mrr_won": 0, "mrr_validated": 1153}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_comunicacao-interna", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-01", "leads": 3, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - peru latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Zona Andina", "month": "2026-01", "leads": 12, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 280}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Zona Andina", "month": "2026-01", "leads": 3, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 1495}, {"campaign": "trafic-search-competencias- [brasil]", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-01", "leads": 3, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 1140}, {"campaign": "leads-performance max- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-01", "leads": 2, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Cono Sur", "month": "2026-01", "leads": 15, "deals": 8, "validated": 6, "won": 2, "mrr_won": 475, "mrr_validated": 1935}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Cono Sur", "month": "2026-01", "leads": 10, "deals": 10, "validated": 9, "won": 3, "mrr_won": 780, "mrr_validated": 2530}, {"campaign": "help.humand.co", "channel": "Referrals", "region": "Cono Sur", "month": "2026-01", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-general- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-01", "leads": 9, "deals": 7, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 2346}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Centroamerica", "month": "2026-01", "leads": 1, "deals": 1, "validated": 1, "won": 1, "mrr_won": 700, "mrr_validated": 700}, {"campaign": "(organic)", "channel": "Organic Search", "region": "M\u00e9xico & Caribe", "month": "2026-01", "leads": 6, "deals": 3, "validated": 3, "won": 1, "mrr_won": 300, "mrr_validated": 2056}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "integration", "channel": "Offline", "region": "HISPAM", "month": "2026-01", "leads": 3, "deals": 2, "validated": 1, "won": 1, "mrr_won": 3750, "mrr_validated": 3750}, {"campaign": "(organic)", "channel": "Organic Search", "region": "EMEA", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_brand", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-01", "leads": 3, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 680}, {"campaign": "trafic-search-general- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-01", "leads": 3, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 800}, {"campaign": "conversion-search-competencias - [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-01", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [colombia]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen sponsored_messaging_leads[bofu]_uk_emea", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-01", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-01", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 360}, {"campaign": "leads-performance max - [noruega]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-01", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-01", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1500}, {"campaign": "search-humand-modulos-- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-01", "leads": 6, "deals": 5, "validated": 4, "won": 1, "mrr_won": 275, "mrr_validated": 2125}, {"campaign": "crm_ui", "channel": "Offline", "region": "HISPAM", "month": "2026-01", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max - [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-01", "leads": 4, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 300}, {"campaign": "trafic-search-competencias- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-01", "leads": 2, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 1500}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "APAC", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Spain", "month": "2026-01", "leads": 3, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 4075}, {"campaign": "leads-performance max - [ee.uu] - high", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Spain", "month": "2026-01", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 750}, {"campaign": "trafic-search-competencias- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-01", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 100}, {"campaign": "leads-performance max - [ee.uu] - high", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max - [ee.uu] - high", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-general- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "accounts.google.com", "channel": "Referrals", "region": "M\u00e9xico & Caribe", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-brand - [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-01", "leads": 5, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 1920}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - argentina latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Spain", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "auto-tagged ppc", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "integration", "channel": "Offline", "region": "Cono Sur", "month": "2026-01", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "linkedin", "channel": "Social Media", "region": "Brazil", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "app.humand.co", "channel": "Referrals", "region": "EMEA", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "help.humand.co", "channel": "Referrals", "region": "Zona Andina", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "app.humand.co", "channel": "Referrals", "region": "Zona Andina", "month": "2026-01", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - panam\u00e1 latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Centroamerica", "month": "2026-01", "leads": 4, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-02", "leads": 27, "deals": 22, "validated": 19, "won": 2, "mrr_won": 576, "mrr_validated": 8054}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Centroamerica", "month": "2026-02", "leads": 5, "deals": 3, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - panam\u00e1 latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Centroamerica", "month": "2026-02", "leads": 7, "deals": 3, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "post22/1-imagenstreamlineyourworkday-latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Centroamerica", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 200}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_desenvolvimento-de-talentos", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-02", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-02", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max - [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-02", "leads": 10, "deals": 6, "validated": 6, "won": 2, "mrr_won": 695, "mrr_validated": 1710}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Cono Sur", "month": "2026-02", "leads": 23, "deals": 20, "validated": 14, "won": 2, "mrr_won": 860, "mrr_validated": 4772}, {"campaign": "conversion-search-humand-modulos- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-02", "leads": 10, "deals": 4, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 380}, {"campaign": "trafic-search-general- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-02", "leads": 9, "deals": 6, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 732}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - argentina latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Cono Sur", "month": "2026-02", "leads": 9, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_pmax_competitors", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-02", "leads": 4, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 250}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_comunicacao-interna", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-02", "leads": 4, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 150}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "EMEA", "month": "2026-02", "leads": 7, "deals": 4, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 2208}, {"campaign": "conversion-search-general- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-02", "leads": 10, "deals": 6, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 2175}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Brazil", "month": "2026-02", "leads": 4, "deals": 2, "validated": 2, "won": 1, "mrr_won": 200, "mrr_validated": 5700}, {"campaign": "(organic)", "channel": "Organic Search", "region": "APAC", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Brazil", "month": "2026-02", "leads": 9, "deals": 4, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 3100}, {"campaign": "lnkdn_lead_gen sponsored_messaging_leads[bofu]_portugal_emea", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-02", "leads": 3, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 150}, {"campaign": "search-humand-modulos-- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-02", "leads": 5, "deals": 4, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 3212}, {"campaign": "conversion-search-competencias - [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-02", "leads": 6, "deals": 4, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 1211}, {"campaign": "search-humand-modulos- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-02", "leads": 13, "deals": 5, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 2290}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Cono Sur", "month": "2026-02", "leads": 57, "deals": 44, "validated": 29, "won": 8, "mrr_won": 3392, "mrr_validated": 16428}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - peru latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Zona Andina", "month": "2026-02", "leads": 6, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 3750}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "M\u00e9xico & Caribe", "month": "2026-02", "leads": 15, "deals": 9, "validated": 9, "won": 2, "mrr_won": 912, "mrr_validated": 6620}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Zona Andina", "month": "2026-02", "leads": 23, "deals": 15, "validated": 9, "won": 0, "mrr_won": 0, "mrr_validated": 7750}, {"campaign": "trafic-search-brand- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-02", "leads": 7, "deals": 4, "validated": 4, "won": 1, "mrr_won": 180, "mrr_validated": 1980}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - colombia latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Zona Andina", "month": "2026-02", "leads": 19, "deals": 4, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 1380}, {"campaign": "leads-performance max - [noruega]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-02", "leads": 2, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 370}, {"campaign": "(organic)", "channel": "Organic Search", "region": "EMEA", "month": "2026-02", "leads": 3, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-brand - [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-02", "leads": 4, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 400}, {"campaign": "trafic-search-brand- [mexico]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-02", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen sponsored_messaging_leads[bofu]_espa\u00f1a_emea", "channel": "Paid Social \u2014 LinkedIn", "region": "Spain", "month": "2026-02", "leads": 7, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 300}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_pmax_interests", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-02", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 450}, {"campaign": "lnkdn_lead_gen sponsored_messaging_leads[bofu]_uk_emea", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "app.humand.co", "channel": "Referrals", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_nordic_display_interests", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-02", "leads": 3, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "search-humand-modulos- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-02", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 150}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Centroamerica", "month": "2026-02", "leads": 4, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 504}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - panam\u00e1 latam", "channel": "Paid Social \u2014 LinkedIn", "region": "M\u00e9xico & Caribe", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-general- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-02", "leads": 6, "deals": 5, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 3688}, {"campaign": "trafic-search-general- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-02", "leads": 2, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-02", "leads": 3, "deals": 3, "validated": 3, "won": 1, "mrr_won": 369, "mrr_validated": 1819}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-02", "leads": 7, "deals": 7, "validated": 7, "won": 3, "mrr_won": 1652, "mrr_validated": 3828}, {"campaign": "help.humand.co", "channel": "Referrals", "region": "Zona Andina", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "search-humand-modulos- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-02", "leads": 8, "deals": 7, "validated": 5, "won": 0, "mrr_won": 0, "mrr_validated": 6300}, {"campaign": "trafic-search-general-arg", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-02", "leads": 8, "deals": 6, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 786}, {"campaign": "search-humand-modulos- [peru]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen sponsored messaging [bofu] - leads ireland emea", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-02", "leads": 9, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 3200}, {"campaign": "trafic-search-competencias- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-02", "leads": 2, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 840}, {"campaign": "leads-performance max- [colombia]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_general", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-02", "leads": 5, "deals": 5, "validated": 5, "won": 1, "mrr_won": 201, "mrr_validated": 1741}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - peru latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Spain", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_desenvolvimento-de-talentos", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-02", "leads": 7, "deals": 4, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 1424}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-02", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "integration", "channel": "Offline", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "integration", "channel": "Offline", "region": "Brazil", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 860}, {"campaign": "trafic-search-brand- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "HISPAM", "month": "2026-02", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_display_interests", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Zona Andina", "month": "2026-02", "leads": 3, "deals": 3, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 660}, {"campaign": "integration", "channel": "Offline", "region": "HISPAM", "month": "2026-02", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen brasil [bofu] - imagen unica - audience rh + ci", "channel": "Paid Social \u2014 LinkedIn", "region": "Brazil", "month": "2026-02", "leads": 4, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_brand", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-02", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 7000}, {"campaign": "trafic-search-competencias- [brasil]", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1900}, {"campaign": "trafic-search-competencias- [brasil]", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1050}, {"campaign": "lnkdn_lead_gen sponsored messaging [tofu] internal comm 4.0 - leads brasil", "channel": "Paid Social \u2014 LinkedIn", "region": "Brazil", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen sponsored messaging rh + ci [bofu] - leads brasil", "channel": "Paid Social \u2014 LinkedIn", "region": "Brazil", "month": "2026-02", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - mexico latam", "channel": "Paid Social \u2014 LinkedIn", "region": "M\u00e9xico & Caribe", "month": "2026-02", "leads": 6, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 428}, {"campaign": "lnkdn_lead_gen sponsored_messaging_leads[bofu]_norway_emea", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-02", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_general", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 110}, {"campaign": "trafic-search-competencias-- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-general- [uki]", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 210}, {"campaign": "trafic-search-competencias- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-02", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 160}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Spain", "month": "2026-02", "leads": 3, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 400}, {"campaign": "youtube", "channel": "Social Media", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "HISPAM", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "instagram", "channel": "Social Media", "region": "Cono Sur", "month": "2026-02", "leads": 3, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-general- [ee.uu]", "channel": "Paid Search \u2014 Google", "region": "NA and Caribbean", "month": "2026-02", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 240}, {"campaign": "prode", "channel": "Paid Social \u2014 Facebook", "region": "Cono Sur", "month": "2026-02", "leads": 22, "deals": 6, "validated": 6, "won": 0, "mrr_won": 0, "mrr_validated": 28}, {"campaign": "trafic-search-brand- [ee.uu]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "accounts.google.com", "channel": "Referrals", "region": "Zona Andina", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-02", "leads": 3, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "NA and Caribbean", "month": "2026-02", "leads": 3, "deals": 1, "validated": 1, "won": 1, "mrr_won": 210, "mrr_validated": 210}, {"campaign": "linkedin", "channel": "Social Media", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 450}, {"campaign": "twitter", "channel": "Social Media", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 157}, {"campaign": "humand.com.ar", "channel": "Referrals", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "NA and Caribbean", "month": "2026-02", "leads": 4, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-competencias-- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "nl_term-sheet_2026-2-24_99548", "channel": "Email Marketing", "region": "NA and Caribbean", "month": "2026-02", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "APAC", "month": "2026-02", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "linkedin", "channel": "Social Media", "region": "NA and Caribbean", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "accounts.google.com", "channel": "Referrals", "region": "M\u00e9xico & Caribe", "month": "2026-02", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1000}, {"campaign": "trafic-search-brand- [argentina]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "120239008734020080", "channel": "Paid Social \u2014 Facebook", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "M\u00e9xico & Caribe", "month": "2026-02", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "whatsapp_arg", "channel": "Paid Social \u2014 Facebook", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_brand", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-02", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 150}, {"campaign": "extension", "channel": "Offline", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "linkedin", "channel": "Social Media", "region": "HISPAM", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_nordic_display_interests", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-02", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads_bofu_na_seriea", "channel": "Paid Social \u2014 Facebook", "region": "NA and Caribbean", "month": "2026-02", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [ee.uu]", "channel": "Paid Search \u2014 Google", "region": "NA and Caribbean", "month": "2026-02", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "APAC", "month": "2026-03", "leads": 3, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "prode", "channel": "Paid Social \u2014 Facebook", "region": "Cono Sur", "month": "2026-03", "leads": 71, "deals": 36, "validated": 23, "won": 0, "mrr_won": 0, "mrr_validated": 1200}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "EMEA", "month": "2026-03", "leads": 10, "deals": 7, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 2260}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Zona Andina", "month": "2026-03", "leads": 29, "deals": 12, "validated": 7, "won": 1, "mrr_won": 25, "mrr_validated": 1580}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Cono Sur", "month": "2026-03", "leads": 51, "deals": 38, "validated": 27, "won": 5, "mrr_won": 1768, "mrr_validated": 9312}, {"campaign": "trafic-search-brand- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-03", "leads": 35, "deals": 20, "validated": 16, "won": 1, "mrr_won": 200, "mrr_validated": 8643}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - mexico latam", "channel": "Paid Social \u2014 LinkedIn", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 8, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 2760}, {"campaign": "leads-performance max- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-03", "leads": 4, "deals": 3, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 300}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Centroamerica", "month": "2026-03", "leads": 7, "deals": 5, "validated": 3, "won": 1, "mrr_won": 390, "mrr_validated": 1942}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - colombia latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Zona Andina", "month": "2026-03", "leads": 14, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 500}, {"campaign": "linkedin", "channel": "Social Media", "region": "Spain", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 300}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Brazil", "month": "2026-03", "leads": 23, "deals": 18, "validated": 13, "won": 2, "mrr_won": 425, "mrr_validated": 5237}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - peru latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Zona Andina", "month": "2026-03", "leads": 9, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-humand-modulos- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-03", "leads": 9, "deals": 3, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 250}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 18, "deals": 8, "validated": 6, "won": 1, "mrr_won": 750, "mrr_validated": 1877}, {"campaign": "trafic-search-general-arg", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-03", "leads": 4, "deals": 3, "validated": 3, "won": 1, "mrr_won": 289, "mrr_validated": 2089}, {"campaign": "trafic-search-competencias- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 3200}, {"campaign": "trafic-search-general- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-03", "leads": 5, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 2150}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "NA and Caribbean", "month": "2026-03", "leads": 5, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 500}, {"campaign": "search-humand-modulos- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-03", "leads": 5, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 630}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_general", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-03", "leads": 10, "deals": 6, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 388}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Cono Sur", "month": "2026-03", "leads": 21, "deals": 13, "validated": 8, "won": 1, "mrr_won": 1290, "mrr_validated": 5365}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - panam\u00e1 latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Centroamerica", "month": "2026-03", "leads": 4, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-brand - [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-03", "leads": 3, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 160}, {"campaign": "trafic-search-competencias-- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-03", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 810}, {"campaign": "leads-performance max - [argentina]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 10, "deals": 6, "validated": 5, "won": 1, "mrr_won": 240, "mrr_validated": 10620}, {"campaign": "trafic-search-brand- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 5, "deals": 3, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 2100}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - argentina latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Cono Sur", "month": "2026-03", "leads": 9, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 2250}, {"campaign": "trafic-search-brand- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-03", "leads": 3, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1800}, {"campaign": "leads_bofu_na_seriea", "channel": "Paid Social \u2014 Facebook", "region": "NA and Caribbean", "month": "2026-03", "leads": 9, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen sponsored_messaging_leads[bofu]_portugal_emea", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-03", "leads": 3, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Spain", "month": "2026-03", "leads": 3, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 600}, {"campaign": "conversion-search-general- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-03", "leads": 4, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen sponsored_messaging_leads[bofu]_portugal_emea", "channel": "Paid Social \u2014 LinkedIn", "region": "Brazil", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 160}, {"campaign": "linkedin", "channel": "Social Media", "region": "Zona Andina", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen sponsored_messaging_leads[bofu]_espa\u00f1a_emea", "channel": "Paid Social \u2014 LinkedIn", "region": "Spain", "month": "2026-03", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 280}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_desenvolvimento-de-talentos", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-03", "leads": 3, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 849}, {"campaign": "lnkdn_lead_gen brasil [bofu] - imagen unica - audience rh + ci", "channel": "Paid Social \u2014 LinkedIn", "region": "Brazil", "month": "2026-03", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 800}, {"campaign": "search-humand-modulos-- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-03", "leads": 10, "deals": 7, "validated": 5, "won": 3, "mrr_won": 1220, "mrr_validated": 1840}, {"campaign": "chatgpt.com", "channel": "AI Referrals", "region": "Cono Sur", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 562}, {"campaign": "conversion-search-competencias - [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-03", "leads": 3, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 4500}, {"campaign": "trafic-search-general- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 6, "deals": 5, "validated": 4, "won": 1, "mrr_won": 375, "mrr_validated": 3525}, {"campaign": "leads-performance max- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-03", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "statics.teams.cdn.office.net", "channel": "Referrals", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leadscampaign-brasil", "channel": "Paid Social \u2014 Facebook", "region": "Brazil", "month": "2026-03", "leads": 74, "deals": 18, "validated": 14, "won": 1, "mrr_won": 159, "mrr_validated": 6847}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-03", "leads": 5, "deals": 5, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 1170}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_pmax_competitors", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-03", "leads": 3, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 1280}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_comunicacao-interna", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-03", "leads": 4, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "crm_ui", "channel": "Offline", "region": "HISPAM", "month": "2026-03", "leads": 2, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "facebook", "channel": "Social Media", "region": "Cono Sur", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "integration", "channel": "Offline", "region": "HISPAM", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "linkedin / carrousel", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-03", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "search-humand-modulos- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 6, "deals": 5, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 1060}, {"campaign": "instagram", "channel": "Social Media", "region": "Cono Sur", "month": "2026-03", "leads": 7, "deals": 7, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 270}, {"campaign": "(organic)", "channel": "Organic Search", "region": "EMEA", "month": "2026-03", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 750}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Spain", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 240}, {"campaign": "help.humand.co", "channel": "Referrals", "region": "Zona Andina", "month": "2026-03", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 600}, {"campaign": "leads-performance max - [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-03", "leads": 5, "deals": 4, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 1340}, {"campaign": "statics.teams.cdn.office.net", "channel": "Referrals", "region": "Cono Sur", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 1, "mrr_won": 200, "mrr_validated": 200}, {"campaign": "leads-performance max - [argentina]", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "extension", "channel": "Offline", "region": "Centroamerica", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "presentations", "channel": "Offline", "region": "Zona Andina", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [peru]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-competencias- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-03", "leads": 5, "deals": 3, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 2500}, {"campaign": "meta / leadgeneration-webconversionbofu-n01", "channel": "Other Campaigns", "region": "Brazil", "month": "2026-03", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_pmax_interests", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-03", "leads": 2, "deals": 3, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 346}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_brand", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-03", "leads": 3, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 4150}, {"campaign": "trafic-search-competencias- [brasil]", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-03", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 260}, {"campaign": "app.humand.co", "channel": "Referrals", "region": "Centroamerica", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 3, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "linkedin / horizontalvideo", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen brasil [bofu] - ui - audience rh + ci", "channel": "Paid Social \u2014 LinkedIn", "region": "Brazil", "month": "2026-03", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 140}, {"campaign": "integration", "channel": "Offline", "region": "Zona Andina", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1125}, {"campaign": "linkedin", "channel": "Social Media", "region": "Cono Sur", "month": "2026-03", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 615}, {"campaign": "lnkdn_lead_gen sponsored messaging rh + ci [bofu] - leads brasil", "channel": "Paid Social \u2014 LinkedIn", "region": "Brazil", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 100}, {"campaign": "lnkdn_lead_gen sponsored_messaging_leads[bofu]_uk_emea", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen sponsored messaging [bofu] - leads ireland emea", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-general- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "auto-tagged ppc", "channel": "Paid Search \u2014 Google", "region": "NA and Caribbean", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "auto-tagged ppc", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "accounts.google.com", "channel": "Referrals", "region": "Zona Andina", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "app.humand.co", "channel": "Referrals", "region": "Zona Andina", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_general", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "auto-tagged ppc", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-03", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 550}, {"campaign": "auto-tagged ppc", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 2, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads[bofu]-meta-na", "channel": "Paid Social \u2014 Facebook", "region": "NA and Caribbean", "month": "2026-03", "leads": 17, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "instagram", "channel": "Social Media", "region": "Zona Andina", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "prode_mx", "channel": "Paid Social \u2014 Facebook", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 9, "deals": 7, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "NA and Caribbean", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Brazil", "month": "2026-03", "leads": 4, "deals": 4, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 2784}, {"campaign": "si-seriea-colper\u00fapanguat-reach", "channel": "Paid Social \u2014 LinkedIn", "region": "Zona Andina", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1000}, {"campaign": "auto-tagged ppc", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1200}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Centroamerica", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "extension", "channel": "Offline", "region": "HISPAM", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Zona Andina", "month": "2026-03", "leads": 3, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "import", "channel": "Offline", "region": "HISPAM", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "humand.com.br", "channel": "Referrals", "region": "Brazil", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_pmax_interests", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leadgeneration-webconversionbofu-courseinternalcomm", "channel": "Other Campaigns", "region": "Brazil", "month": "2026-03", "leads": 2, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "linkedin", "channel": "Social Media", "region": "EMEA", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "extension", "channel": "Offline", "region": "Cono Sur", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "[campaign.name]", "channel": "Paid Social \u2014 LinkedIn", "region": "Spain", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "prode", "channel": "Paid Social \u2014 Facebook", "region": "Brazil", "month": "2026-03", "leads": 4, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "integration", "channel": "Offline", "region": "Brazil", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "120239008734020080", "channel": "Paid Social \u2014 Facebook", "region": "Cono Sur", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_tofu_emea_portugal_demgen_awareness", "channel": "Paid Social \u2014 Facebook", "region": "EMEA", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 450}, {"campaign": "gads_lead_gen_tofu_emea_spain_search_nonbranded_producto", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "chatgpt.com", "channel": "AI Referrals", "region": "NA and Caribbean", "month": "2026-03", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 700}, {"campaign": "trafic-search-competencias- [brasil]", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_tofu_emea_portugal_search_nonbranded_producto", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-03", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "help.humand.co", "channel": "Referrals", "region": "Cono Sur", "month": "2026-03", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 22, "deals": 8, "validated": 6, "won": 0, "mrr_won": 0, "mrr_validated": 4190}, {"campaign": "leadscampaign-brasil", "channel": "Paid Social \u2014 Facebook", "region": "Brazil", "month": "2026-04", "leads": 45, "deals": 5, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 588}, {"campaign": "search-humand-modulos- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 10, "deals": 5, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 720}, {"campaign": "prode_mx", "channel": "Paid Social \u2014 Facebook", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 87, "deals": 52, "validated": 27, "won": 0, "mrr_won": 0, "mrr_validated": 5440}, {"campaign": "lnkdn_lead_gen-sponsored messaging [bofu]-emea-espa\u00f1a", "channel": "Paid Social \u2014 LinkedIn", "region": "Spain", "month": "2026-04", "leads": 9, "deals": 5, "validated": 5, "won": 0, "mrr_won": 0, "mrr_validated": 5920}, {"campaign": "lnkdn_lead_gen-sponsored messaging [bofu]-emea-uk", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-04", "leads": 4, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_tofu_emea_spain_search_nonbranded_producto", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-04", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "prode", "channel": "Paid Social \u2014 Facebook", "region": "Cono Sur", "month": "2026-04", "leads": 99, "deals": 44, "validated": 28, "won": 1, "mrr_won": 600, "mrr_validated": 3498}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - mexico latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Cono Sur", "month": "2026-04", "leads": 52, "deals": 25, "validated": 11, "won": 2, "mrr_won": 320, "mrr_validated": 2400}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-04", "leads": 6, "deals": 5, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 1220}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_desenvolvimento-de-talentos", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-04", "leads": 5, "deals": 4, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 1377}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_pmax_competitors", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-04", "leads": 4, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 1470}, {"campaign": "trafic-search-competencias- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 3, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 8750}, {"campaign": "prode", "channel": "Paid Social \u2014 Facebook", "region": "HISPAM", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Cono Sur", "month": "2026-04", "leads": 50, "deals": 32, "validated": 24, "won": 3, "mrr_won": 2092, "mrr_validated": 5342}, {"campaign": "trafic-search-general-arg", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-04", "leads": 7, "deals": 6, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 456}, {"campaign": "leads[bofu]-meta-na", "channel": "Paid Social \u2014 Facebook", "region": "NA and Caribbean", "month": "2026-04", "leads": 50, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-04", "leads": 27, "deals": 14, "validated": 10, "won": 0, "mrr_won": 0, "mrr_validated": 3600}, {"campaign": "trafic-search-competencias- [brasil]", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-04", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Brazil", "month": "2026-04", "leads": 15, "deals": 10, "validated": 7, "won": 1, "mrr_won": 390, "mrr_validated": 13590}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_general", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-04", "leads": 10, "deals": 8, "validated": 5, "won": 0, "mrr_won": 0, "mrr_validated": 12404}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - peru latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Zona Andina", "month": "2026-04", "leads": 5, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-brand - [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_general", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen-sponsored messaging [bofu]-emea-portugal", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-04", "leads": 3, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "facebook", "channel": "Social Media", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 9, "deals": 4, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "prode", "channel": "Paid Social \u2014 Facebook", "region": "Brazil", "month": "2026-04", "leads": 68, "deals": 27, "validated": 10, "won": 0, "mrr_won": 0, "mrr_validated": 1375}, {"campaign": "120240130486500080", "channel": "Paid Social \u2014 Facebook", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 5, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - argentina latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Cono Sur", "month": "2026-04", "leads": 3, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 990}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Brazil", "month": "2026-04", "leads": 6, "deals": 4, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 3075}, {"campaign": "instagram", "channel": "Social Media", "region": "Cono Sur", "month": "2026-04", "leads": 30, "deals": 18, "validated": 10, "won": 0, "mrr_won": 0, "mrr_validated": 536}, {"campaign": "instagram", "channel": "Social Media", "region": "Brazil", "month": "2026-04", "leads": 13, "deals": 7, "validated": 4, "won": 1, "mrr_won": 100, "mrr_validated": 100}, {"campaign": "leads_bofu_na_seriea", "channel": "Paid Social \u2014 Facebook", "region": "NA and Caribbean", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen-sponsoredmessaging [bofu]-emea-uk-retail", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 900}, {"campaign": "instagram", "channel": "Social Media", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 6, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "humand.es", "channel": "Referrals", "region": "Cono Sur", "month": "2026-04", "leads": 2, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-competencias- [ee.uu]", "channel": "Paid Search \u2014 Google", "region": "NA and Caribbean", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "search-humand-modulos- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 3, "deals": 3, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "psp_lnknd_lead_gen sponsoredmessagingpartnership-argentina", "channel": "Paid Social \u2014 LinkedIn", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 150}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - colombia latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Zona Andina", "month": "2026-04", "leads": 7, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - panam\u00e1 latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Centroamerica", "month": "2026-04", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 1, "mrr_won": 240, "mrr_validated": 240}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Zona Andina", "month": "2026-04", "leads": 22, "deals": 11, "validated": 7, "won": 0, "mrr_won": 0, "mrr_validated": 420}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "EMEA", "month": "2026-04", "leads": 4, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 1490}, {"campaign": "trafic-search-competencias- [brasil]", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-04", "leads": 5, "deals": 3, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 450}, {"campaign": "search-humand-modulos- [peru]", "channel": "Paid Search \u2014 Google", "region": "NA and Caribbean", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 1, "mrr_won": 200, "mrr_validated": 200}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Zona Andina", "month": "2026-04", "leads": 35, "deals": 13, "validated": 7, "won": 0, "mrr_won": 0, "mrr_validated": 790}, {"campaign": "facebook", "channel": "Social Media", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-competencias-- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-04", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1300}, {"campaign": "integration", "channel": "Offline", "region": "HISPAM", "month": "2026-04", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 10, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 2100}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - mexico latam", "channel": "Paid Social \u2014 LinkedIn", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-humand-modulos- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 7, "deals": 5, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 896}, {"campaign": "trafic-search-competencias- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "app.humand.co", "channel": "Referrals", "region": "Zona Andina", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "HISPAM", "month": "2026-04", "leads": 3, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Centroamerica", "month": "2026-04", "leads": 4, "deals": 4, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 480}, {"campaign": "leads-performance max- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 8, "deals": 4, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 3040}, {"campaign": "app.humand.co", "channel": "Referrals", "region": "Cono Sur", "month": "2026-04", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Centroamerica", "month": "2026-04", "leads": 8, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 2432}, {"campaign": "(organic)", "channel": "Organic Search", "region": "EMEA", "month": "2026-04", "leads": 3, "deals": 3, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 1174}, {"campaign": "trafic-search-brand- [argentina]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-general- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 6, "deals": 5, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 1480}, {"campaign": "leads[bofu]-meta-na", "channel": "Paid Social \u2014 Facebook", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "psp_lnknd_lead_gen sponsoredmessagingpartnership-brasil", "channel": "Paid Social \u2014 LinkedIn", "region": "Brazil", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 450}, {"campaign": "facebook", "channel": "Social Media", "region": "Brazil", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / {{adset.name}}", "channel": "Other Campaigns", "region": "Brazil", "month": "2026-04", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "padlet.com", "channel": "Referrals", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 300}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "NA and Caribbean", "month": "2026-04", "leads": 4, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Spain", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "conversion-search-general- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 4, "deals": 4, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1650}, {"campaign": "ig / instagram_reels", "channel": "Other Campaigns", "region": "Spain", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 520}, {"campaign": "leads-performance max- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 6, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 180}, {"campaign": "instagram", "channel": "Social Media", "region": "Spain", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "fb / facebook_mobile_feed", "channel": "Other Campaigns", "region": "Spain", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "prode_mx", "channel": "Paid Social \u2014 Facebook", "region": "Zona Andina", "month": "2026-04", "leads": 95, "deals": 51, "validated": 30, "won": 0, "mrr_won": 0, "mrr_validated": 1056}, {"campaign": "instagram", "channel": "Social Media", "region": "Zona Andina", "month": "2026-04", "leads": 19, "deals": 9, "validated": 6, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "120241151770720080", "channel": "Paid Social \u2014 Facebook", "region": "Zona Andina", "month": "2026-04", "leads": 5, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 110}, {"campaign": "facebook", "channel": "Social Media", "region": "Zona Andina", "month": "2026-04", "leads": 7, "deals": 3, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Spain", "month": "2026-04", "leads": 4, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "linkedin / carrousel", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-04", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_argentina_search_funcionalidadesrrhh", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_brand", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-04", "leads": 4, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 1220}, {"campaign": "chatgpt.com", "channel": "AI Referrals", "region": "Brazil", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "help.humand.co", "channel": "Referrals", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "NA and Caribbean", "month": "2026-04", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_brand", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-04", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "search-humand-modulos-- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-04", "leads": 3, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 800}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_pmax_interests", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-04", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "linkedin", "channel": "Social Media", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 800}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_comunicacao-interna", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-04", "leads": 2, "deals": 3, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 732}, {"campaign": "gads_lead_gen_bofu_hispam_panama_guatemala_search_general", "channel": "Paid Search \u2014 Google", "region": "Centroamerica", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-general- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 3, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 6000}, {"campaign": "ig / instagram_feed", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max - [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-04", "leads": 11, "deals": 6, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 2017}, {"campaign": "trafic-search-brand- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 4, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 100}, {"campaign": "instagram", "channel": "Social Media", "region": "NA and Caribbean", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "statics.teams.cdn.office.net", "channel": "Referrals", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "help.humand.co", "channel": "Referrals", "region": "EMEA", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_argentina_search_prode", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-04", "leads": 7, "deals": 3, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "ig / instagram_feed", "channel": "Other Campaigns", "region": "Spain", "month": "2026-04", "leads": 5, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "HISPAM", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen-sponsored messaging [bofu]-emea-spain-hospitality", "channel": "Paid Social \u2014 LinkedIn", "region": "Spain", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "help.humand.co", "channel": "Referrals", "region": "Zona Andina", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leadgeneration-webconversionbofu-n01", "channel": "Other Campaigns", "region": "Brazil", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 1, "mrr_won": 100, "mrr_validated": 100}, {"campaign": "statics.teams.cdn.office.net", "channel": "Referrals", "region": "Zona Andina", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 360}, {"campaign": "ooh / streaming", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-04", "leads": 4, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "facebook", "channel": "Social Media", "region": "Spain", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-segmentationaudience-brasil-feedstory(conversionmarcarbola)", "channel": "Other Campaigns", "region": "Brazil", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-colombia-lal segmentation-feed stories", "channel": "Other Campaigns", "region": "Zona Andina", "month": "2026-04", "leads": 11, "deals": 7, "validated": 5, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-mexico-lal segmentation-feed", "channel": "Other Campaigns", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 8, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "instagram / story", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-04", "leads": 2, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "chatgpt.com", "channel": "AI Referrals", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-argentina-lal segmentation-feed stories(agendardemo)", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-04", "leads": 11, "deals": 6, "validated": 5, "won": 0, "mrr_won": 0, "mrr_validated": 585}, {"campaign": "414996120", "channel": "Email Marketing", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_mexico_search_quiniela", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "statics.teams.cdn.office.net", "channel": "Referrals", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "crm_ui", "channel": "Offline", "region": "HISPAM", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "[campaign.name]", "channel": "Paid Social \u2014 LinkedIn", "region": "Brazil", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 459}, {"campaign": "gads_lead_gen_bofu_hispam_panama_guatemala_search_competitors", "channel": "Paid Search \u2014 Google", "region": "Centroamerica", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 1, "mrr_won": 70, "mrr_validated": 70}, {"campaign": "meta / {{adset.name}}", "channel": "Other Campaigns", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-segmentationaudience-brasil-feedstory(conversionmarcarbola-newurl)", "channel": "Other Campaigns", "region": "Brazil", "month": "2026-04", "leads": 6, "deals": 4, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / {{adset.name}}", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "25030938-newsletter", "channel": "Paid Search \u2014 Google", "region": "Centroamerica", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "APAC", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "youtube", "channel": "Social Media", "region": "Zona Andina", "month": "2026-04", "leads": 5, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-mexico-lal segmentation-stories", "channel": "Other Campaigns", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "414996120", "channel": "Email Marketing", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "[campaign.name]", "channel": "Paid Social \u2014 LinkedIn", "region": "Zona Andina", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 4000}, {"campaign": "youtube", "channel": "Social Media", "region": "Brazil", "month": "2026-04", "leads": 3, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 510}, {"campaign": "youtube", "channel": "Social Media", "region": "HISPAM", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-colombia-ls-feed stories", "channel": "Other Campaigns", "region": "Zona Andina", "month": "2026-04", "leads": 36, "deals": 15, "validated": 7, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-argentina-ls segmentation-feed stories(agendardemo)", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-04", "leads": 17, "deals": 9, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "[campaign.name]", "channel": "Paid Social \u2014 LinkedIn", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 1800}, {"campaign": "youtube", "channel": "Social Media", "region": "Cono Sur", "month": "2026-04", "leads": 6, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-argentina-ls-feed stories(agendardemo)", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-04", "leads": 13, "deals": 3, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "chatgpt.com", "channel": "AI Referrals", "region": "Zona Andina", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / {{adset.name}}", "channel": "Other Campaigns", "region": "Zona Andina", "month": "2026-04", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-mexico-lalwon segmentation-feed stories", "channel": "Other Campaigns", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 9, "deals": 3, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-mexico-lalwon-feed stories", "channel": "Other Campaigns", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 7, "deals": 4, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 300}, {"campaign": "youtube", "channel": "Social Media", "region": "Centroamerica", "month": "2026-04", "leads": 6, "deals": 4, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "youtube", "channel": "Social Media", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 6, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_colombia_search_polla", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-colombia-ls segmentation-feed stories", "channel": "Other Campaigns", "region": "Zona Andina", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "120247652556170110", "channel": "Paid Social \u2014 Facebook", "region": "Spain", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "youtube", "channel": "Social Media", "region": "APAC", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "fb / facebook_mobile_feed", "channel": "Other Campaigns", "region": "NA and Caribbean", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-colombia-ls-feed", "channel": "Other Campaigns", "region": "Zona Andina", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-argentina-ls-feed", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "youtube", "channel": "Social Media", "region": "Spain", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "traffic-lkdn-emea-mofu-spain", "channel": "Paid Social \u2014 LinkedIn", "region": "Spain", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "ooh / staticad", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-04", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "ig / instagram_feed", "channel": "Other Campaigns", "region": "EMEA", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_mexico_search_quiniela", "channel": "Paid Search \u2014 Google", "region": "Centroamerica", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "youtube", "channel": "Social Media", "region": "EMEA", "month": "2026-04", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "NA and Caribbean", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_argentina_search_whatsapp", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-04", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Cono Sur", "month": "2026-05", "leads": 46, "deals": 26, "validated": 8, "won": 0, "mrr_won": 0, "mrr_validated": 3482}, {"campaign": "meta / leads-prode-argentina-ls-feed stories(agendardemo)", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-05", "leads": 30, "deals": 9, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-colombia-ls-feed stories", "channel": "Other Campaigns", "region": "Zona Andina", "month": "2026-05", "leads": 60, "deals": 21, "validated": 7, "won": 0, "mrr_won": 0, "mrr_validated": 453}, {"campaign": "meta / leads-prode-segmentationaudience-brasil-feedstory(conversionmarcarbola-newurl)", "channel": "Other Campaigns", "region": "Brazil", "month": "2026-05", "leads": 12, "deals": 8, "validated": 5, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "NA and Caribbean", "month": "2026-05", "leads": 11, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "youtube", "channel": "Social Media", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 4, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 17, "deals": 6, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-mexico-lalwon segmentation-feed stories", "channel": "Other Campaigns", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 15, "deals": 6, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Spain", "month": "2026-05", "leads": 6, "deals": 4, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 200}, {"campaign": "youtube", "channel": "Social Media", "region": "Cono Sur", "month": "2026-05", "leads": 3, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leadscampaign-brasil", "channel": "Paid Social \u2014 Facebook", "region": "Brazil", "month": "2026-05", "leads": 24, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 7360}, {"campaign": "instagram", "channel": "Social Media", "region": "Cono Sur", "month": "2026-05", "leads": 23, "deals": 12, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 200}, {"campaign": "gads_lead_gen_bofu_united states_search_solutions", "channel": "Paid Search \u2014 Google", "region": "NA and Caribbean", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "youtube", "channel": "Social Media", "region": "HISPAM", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-mexico-lal segmentation-feed", "channel": "Other Campaigns", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 3, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "youtube", "channel": "Social Media", "region": "Zona Andina", "month": "2026-05", "leads": 7, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Zona Andina", "month": "2026-05", "leads": 24, "deals": 9, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "[campaign.name]", "channel": "Paid Social \u2014 LinkedIn", "region": "Brazil", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-argentina-ls segmentation-feed stories(agendardemo)", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-05", "leads": 14, "deals": 3, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "instagram", "channel": "Social Media", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 3, "deals": 3, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "instagram", "channel": "Social Media", "region": "Zona Andina", "month": "2026-05", "leads": 4, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_pmax_competitors", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-05", "leads": 2, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Centroamerica", "month": "2026-05", "leads": 5, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "help.humand.co", "channel": "Referrals", "region": "Centroamerica", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Zona Andina", "month": "2026-05", "leads": 43, "deals": 22, "validated": 4, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-mexico-lalwon-feed stories", "channel": "Other Campaigns", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 16, "deals": 10, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / {{adset.name}}", "channel": "Other Campaigns", "region": "Zona Andina", "month": "2026-05", "leads": 2, "deals": 3, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads[bofu]-meta-na", "channel": "Paid Social \u2014 Facebook", "region": "NA and Caribbean", "month": "2026-05", "leads": 3, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "prode", "channel": "Paid Social \u2014 Facebook", "region": "Cono Sur", "month": "2026-05", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "[campaign.name]", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "facebook", "channel": "Social Media", "region": "Zona Andina", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "EMEA", "month": "2026-05", "leads": 4, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 240}, {"campaign": "instagram / story", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-05", "leads": 3, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-05", "leads": 19, "deals": 12, "validated": 6, "won": 0, "mrr_won": 0, "mrr_validated": 1304}, {"campaign": "conversion-search-brand - [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-05", "leads": 3, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-general-arg", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-05", "leads": 4, "deals": 3, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Cono Sur", "month": "2026-05", "leads": 51, "deals": 26, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 3120}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Brazil", "month": "2026-05", "leads": 10, "deals": 4, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 450}, {"campaign": "leads-performance max - [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-05", "leads": 11, "deals": 7, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 200}, {"campaign": "meta / leads-prode-colombia-ls segmentation-feed stories", "channel": "Other Campaigns", "region": "Zona Andina", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-general- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-05", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 2400}, {"campaign": "conversion-search-general- [colombia]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-05", "leads": 3, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 400}, {"campaign": "trafic-search-competencias- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 5, "deals": 3, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 200}, {"campaign": "(organic)", "channel": "Organic Search", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 4, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "linkedin", "channel": "Social Media", "region": "Cono Sur", "month": "2026-05", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "search-humand-modulos- [mexico]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-05", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 240}, {"campaign": "search-humand-modulos- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-05", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 100}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Centroamerica", "month": "2026-05", "leads": 4, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "integration", "channel": "Offline", "region": "HISPAM", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 4, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_mexico_search_quiniela", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 5, "deals": 2, "validated": 2, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "youtube", "channel": "Social Media", "region": "Brazil", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_general", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-05", "leads": 3, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "120240130486500080", "channel": "Paid Social \u2014 Facebook", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 4, "deals": 4, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-general- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 4, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [uki]", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-05", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 150}, {"campaign": "conversion-search-competencias - [colombia]", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "Spain", "month": "2026-05", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "search-humand-modulos-- [argentina]", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-05", "leads": 3, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_brand", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-05", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 715}, {"campaign": "gads_lead_gen_bofu_hispam_colombia_search_polla", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-05", "leads": 3, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [mexico]", "channel": "Paid Search \u2014 Google", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "Brazil", "month": "2026-05", "leads": 8, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "ig / instagram_reels", "channel": "Other Campaigns", "region": "Spain", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen-sponsored messaging [bofu]-emea-portugal", "channel": "Paid Social \u2014 LinkedIn", "region": "EMEA", "month": "2026-05", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "instagram", "channel": "Social Media", "region": "Brazil", "month": "2026-05", "leads": 4, "deals": 4, "validated": 3, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "prode_mx", "channel": "Paid Social \u2014 Facebook", "region": "Zona Andina", "month": "2026-05", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "EMEA", "month": "2026-05", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 90}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_comunicacao-interna", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-05", "leads": 5, "deals": 3, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-competencias- [brasil]", "channel": "Paid Search \u2014 Google", "region": "EMEA", "month": "2026-05", "leads": 2, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "417388777", "channel": "Email Marketing", "region": "Cono Sur", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "417386937", "channel": "Email Marketing", "region": "Zona Andina", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "NA and Caribbean", "month": "2026-05", "leads": 5, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_argentina_search_prode", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-05", "leads": 3, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "youtube", "channel": "Social Media", "region": "Centroamerica", "month": "2026-05", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "417392395", "channel": "Email Marketing", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [peru]", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-05", "leads": 5, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "facebook", "channel": "Social Media", "region": "M\u00e9xico & Caribe", "month": "2026-05", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "ticktick.com", "channel": "Referrals", "region": "Cono Sur", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "youtube", "channel": "Social Media", "region": "NA and Caribbean", "month": "2026-05", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "ooh / staticad", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-05", "leads": 3, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "fb / facebook_mobile_feed", "channel": "Other Campaigns", "region": "NA and Caribbean", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_brazil_brasil_search_desenvolvimento-de-talentos", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "417391802", "channel": "Email Marketing", "region": "Zona Andina", "month": "2026-05", "leads": 2, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "copilot.com / none", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_colombia_search_funcionalidadesrrhh", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / {{adset.name}}", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnkdn_lead_gen-sponsored messaging [bofu]-emea-espa\u00f1a", "channel": "Paid Social \u2014 LinkedIn", "region": "Spain", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "press / press release", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-05", "leads": 1, "deals": 1, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-argentina-lal segmentation-feed stories(agendardemo)", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "statics.teams.cdn.office.net", "channel": "Referrals", "region": "Cono Sur", "month": "2026-05", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "linkedin / horizontalvideo", "channel": "Other Campaigns", "region": "Cono Sur", "month": "2026-05", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "app.hubspot.com", "channel": "Referrals", "region": "Cono Sur", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_panama_guatemala_search_general", "channel": "Paid Search \u2014 Google", "region": "Centroamerica", "month": "2026-05", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_panama_guatemala_pmax", "channel": "Paid Search \u2014 Google", "region": "Centroamerica", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "417391236", "channel": "Email Marketing", "region": "Brazil", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "humand.es", "channel": "Referrals", "region": "Zona Andina", "month": "2026-05", "leads": 2, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "copilot.com / none", "channel": "Other Campaigns", "region": "Zona Andina", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-colombia-ls-feed", "channel": "Other Campaigns", "region": "Zona Andina", "month": "2026-05", "leads": 2, "deals": 2, "validated": 1, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max- [colombia]", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "app.humand.co", "channel": "Referrals", "region": "Zona Andina", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "meta / leads-prode-lalopenaudience-brasil-feedstory(conversionmarcarbola-newurl)", "channel": "Other Campaigns", "region": "Brazil", "month": "2026-05", "leads": 7, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(direct)", "channel": "Direct Traffic", "region": "APAC", "month": "2026-05", "leads": 2, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "bof_meta_emea_leadgen_2026-05", "channel": "Paid Social \u2014 Facebook", "region": "Spain", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "APAC", "month": "2026-05", "leads": 2, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "instagram", "channel": "Social Media", "region": "Spain", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "ig / instagram_stories", "channel": "Other Campaigns", "region": "Spain", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-competencias-arg", "channel": "Paid Search \u2014 Google", "region": "Spain", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "bof_meta_emea_leadgen_2026-05", "channel": "Paid Social \u2014 Facebook", "region": "EMEA", "month": "2026-05", "leads": 4, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-brand- [espa\u00f1a]", "channel": "Paid Search \u2014 Google", "region": "NA and Caribbean", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-05", "leads": 2, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "(organic)", "channel": "Organic Search", "region": "HISPAM", "month": "2026-05", "leads": 2, "deals": 2, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_panama_guatemala_search_gestion-de-rrhh", "channel": "Paid Search \u2014 Google", "region": "Centroamerica", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "trafic-search-competencias- [brasil]", "channel": "Paid Search \u2014 Google", "region": "Brazil", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "Zona Andina", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "prode", "channel": "Paid Social \u2014 Facebook", "region": "Brazil", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "gads_lead_gen_bofu_hispam_argentina_search_ia", "channel": "Paid Search \u2014 Google", "region": "Cono Sur", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "25030938-newsletter", "channel": "Paid Search \u2014 Google", "region": "Centroamerica", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "leads-performance max - [latam] rlsa - visitas web", "channel": "Paid Search \u2014 Google", "region": "HISPAM", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "lnknd_lead_gen sponsored messaging [bofu] - panam\u00e1 latam", "channel": "Paid Social \u2014 LinkedIn", "region": "Centroamerica", "month": "2026-05", "leads": 1, "deals": 0, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "ig / instagram_feed", "channel": "Other Campaigns", "region": "Spain", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}, {"campaign": "418691671", "channel": "Email Marketing", "region": "Cono Sur", "month": "2026-05", "leads": 1, "deals": 1, "validated": 0, "won": 0, "mrr_won": 0, "mrr_validated": 0}], "spend": {"auto-tagged ppc": 0, "leads-performance max - [ee.uu] - high": 0, "psp_lnknd_lead_gen sponsored messaging partnership - p\u00fablico referral bogota/lima": 4762.77, "lnknd_lead_gen sponsored messaging [bofu] - argentina latam": 10479.7, "(direct)": 0, "(organic)": 0, "gads_lead_gen_bofu_brazil_brasil_search_desenvolvimento-de-talentos": 0, "trafic-search-brand- [argentina]": 0, "trafic-search-competencias- [ee.uu]": 0, "conversion-search-humand-modulos- [colombia]": 0, "leads-performance max - [latam] rlsa - visitas web": 0, "lnknd_lead_gen sponsored messaging [bofu] - peru latam": 9315.22, "trafic-search-brand- [peru]": 0, "gads_lead_gen_bofu_brazil_brasil_display_interests": 0, "conversion-search-humand-modulos- [ee.uu]": 0, "help.humand.co": 0, "search-humand-modulos- [espa\u00f1a]": 0, "conversion-search-competencias - [colombia]": 0, "lnkdn_lead_gen brasil [bofu] - imagen unica - audience rh + ci": 4198.4, "lnknd_lead_gen sponsored messaging [bofu] - colombia latam": 10487.11, "trafic-search-competencias- [mexico]": 0, "leads-performance max- [peru]": 0, "conversion-search-brand - [colombia]": 0, "conversion-search-general- [colombia]": 0, "trafic-search-brand- [ee.uu]": 0, "lnkdn_lead_gen sponsored_messaging_leads[bofu]_portugal_emea": 6338.3, "trafic-search-general- [mexico]": 0, "gads_lead_gen_bofu_brazil_brasil_search_general": 0, "statics.teams.cdn.office.net": 0, "search-humand-modulos-- [argentina]": 0, "search-humand-modulos- [peru]": 0, "extension": 0, "admin.humand.co": 0, "search-humand-modulos- [mexico]": 0, "leads-performance max- [mexico]": 0, "gads_lead_gen_bofu_brazil_brasil_pmax_competitors": 0, "trafic-search-competencias-- [espa\u00f1a]": 0, "trafic-search-competencias-- [argentina]": 0, "gads_lead_gen_bofu_brazil_brasil_pmax_interests": 0, "lnkdn_lead_gen sponsored messaging [bofu] - leads ireland emea": 10399.12, "leads-performance max- [colombia]": 0, "trafic-search-general-arg": 0, "trafic-search-general- [peru]": 0, "lnknd_lead_gen sponsored messaging [bofu] - mexico latam": 10516.66, "gads_lead_gen_bofu_brazil_brasil_search_comunicacao-interna": 0, "trafic-search-competencias- [brasil]": 0, "leads-performance max- [espa\u00f1a]": 0, "integration": 0, "gads_lead_gen_bofu_brazil_brasil_search_brand": 0, "lnkdn_lead_gen sponsored_messaging_leads[bofu]_uk_emea": 5131.48, "trafic-search-brand- [mexico]": 0, "leads-performance max - [noruega]": 0, "trafic-search-brand- [espa\u00f1a]": 0, "crm_ui": 0, "leads-performance max - [argentina]": 0, "trafic-search-competencias- [peru]": 0, "trafic-search-general- [espa\u00f1a]": 0, "accounts.google.com": 0, "linkedin": 0, "app.humand.co": 0, "lnknd_lead_gen sponsored messaging [bofu] - panam\u00e1 latam": 3134.12, "post22/1-imagenstreamlineyourworkday-latam": 0, "lnkdn_lead_gen sponsored_messaging_leads[bofu]_espa\u00f1a_emea": 7577.91, "gads_lead_gen_bofu_brazil_nordic_display_interests": 0, "lnkdn_lead_gen sponsored messaging [tofu] internal comm 4.0 - leads brasil": 4339.02, "lnkdn_lead_gen sponsored messaging rh + ci [bofu] - leads brasil": 2350.49, "lnkdn_lead_gen sponsored_messaging_leads[bofu]_norway_emea": 2780.27, "trafic-search-general- [uki]": 0, "youtube": 0, "instagram": 0, "trafic-search-general- [ee.uu]": 0, "prode": 4578.44, "twitter": 0, "humand.com.ar": 0, "nl_term-sheet_2026-2-24_99548": 0, "120239008734020080": 0, "whatsapp_arg": 1620.38, "leads_bofu_na_seriea": 2394.65, "chatgpt.com": 0, "leadscampaign-brasil": 3874.47, "facebook": 0, "linkedin / carrousel": 0, "presentations": 0, "meta / leadgeneration-webconversionbofu-n01": 0, "linkedin / horizontalvideo": 0, "lnkdn_lead_gen brasil [bofu] - ui - audience rh + ci": 949.99, "leads[bofu]-meta-na": 7129.64, "prode_mx": 2495.65, "si-seriea-colper\u00fapanguat-reach": 0, "import": 0, "humand.com.br": 0, "meta / leadgeneration-webconversionbofu-courseinternalcomm": 0, "[campaign.name]": 0, "gads_lead_gen_tofu_emea_portugal_demgen_awareness": 0, "gads_lead_gen_tofu_emea_spain_search_nonbranded_producto": 0, "gads_lead_gen_tofu_emea_portugal_search_nonbranded_producto": 0, "lnkdn_lead_gen-sponsored messaging [bofu]-emea-espa\u00f1a": 2711.47, "lnkdn_lead_gen-sponsored messaging [bofu]-emea-uk": 3491.25, "lnkdn_lead_gen-sponsored messaging [bofu]-emea-portugal": 3380.17, "120240130486500080": 0, "lnkdn_lead_gen-sponsoredmessaging [bofu]-emea-uk-retail": 1748.68, "humand.es": 0, "psp_lnknd_lead_gen sponsoredmessagingpartnership-argentina": 1430.81, "psp_lnknd_lead_gen sponsoredmessagingpartnership-brasil": 1976.28, "meta / {{adset.name}}": 0, "padlet.com": 0, "ig / instagram_reels": 0, "fb / facebook_mobile_feed": 0, "120241151770720080": 0, "gads_lead_gen_bofu_hispam_argentina_search_funcionalidadesrrhh": 0, "gads_lead_gen_bofu_hispam_panama_guatemala_search_general": 0, "ig / instagram_feed": 0, "gads_lead_gen_bofu_hispam_argentina_search_prode": 0, "lnkdn_lead_gen-sponsored messaging [bofu]-emea-spain-hospitality": 1156.0, "ooh / streaming": 0, "meta / leads-prode-segmentationaudience-brasil-feedstory(conversionmarcarbola)": 0, "meta / leads-prode-colombia-lal segmentation-feed stories": 0, "meta / leads-prode-mexico-lal segmentation-feed": 0, "instagram / story": 0, "meta / leads-prode-argentina-lal segmentation-feed stories(agendardemo)": 0, "414996120": 0, "gads_lead_gen_bofu_hispam_mexico_search_quiniela": 0, "gads_lead_gen_bofu_hispam_panama_guatemala_search_competitors": 0, "meta / leads-prode-segmentationaudience-brasil-feedstory(conversionmarcarbola-newurl)": 0, "25030938-newsletter": 0, "meta / leads-prode-mexico-lal segmentation-stories": 0, "meta / leads-prode-colombia-ls-feed stories": 0, "meta / leads-prode-argentina-ls segmentation-feed stories(agendardemo)": 0, "meta / leads-prode-argentina-ls-feed stories(agendardemo)": 0, "meta / leads-prode-mexico-lalwon segmentation-feed stories": 0, "meta / leads-prode-mexico-lalwon-feed stories": 0, "gads_lead_gen_bofu_hispam_colombia_search_polla": 0, "meta / leads-prode-colombia-ls segmentation-feed stories": 0, "120247652556170110": 0, "meta / leads-prode-colombia-ls-feed": 0, "meta / leads-prode-argentina-ls-feed": 0, "traffic-lkdn-emea-mofu-spain": 1279.14, "ooh / staticad": 0, "gads_lead_gen_bofu_hispam_argentina_search_whatsapp": 0, "gads_lead_gen_bofu_united states_search_solutions": 0, "trafic-search-brand- [uki]": 0, "417388777": 0, "417386937": 0, "417392395": 0, "ticktick.com": 0, "417391802": 0, "copilot.com / none": 0, "gads_lead_gen_bofu_hispam_colombia_search_funcionalidadesrrhh": 0, "press / press release": 0, "app.hubspot.com": 0, "gads_lead_gen_bofu_hispam_panama_guatemala_pmax": 0, "417391236": 0, "meta / leads-prode-lalopenaudience-brasil-feedstory(conversionmarcarbola-newurl)": 0, "bof_meta_emea_leadgen_2026-05": 504.13, "ig / instagram_stories": 0, "trafic-search-competencias-arg": 0, "gads_lead_gen_bofu_hispam_panama_guatemala_search_gestion-de-rrhh": 0, "gads_lead_gen_bofu_hispam_argentina_search_ia": 0, "418691671": 0}};
+let selRegions = new Set(RAW.regions);
+let dateFrom = RAW.months[0];
+let dateTo = RAW.months[RAW.months.length-1];
+let campFilter = '';
+let sortStates = {};
 let charts = {};
-let picker = null;
 
-const TITLES = { resumen:'Resumen General', campana:'Por Campana', calidad:'Por Calidad', empresa:'Por Empresa', formulario:'Por Formulario' };
-const MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+// Init region checkboxes
+const rl = document.getElementById('region-list');
+RAW.regions.forEach(r => {
+  const div = document.createElement('div');
+  div.className = 'region-item checked';
+  div.innerHTML = `<input type="checkbox" checked onchange="toggleRegion('${r}',this.checked)"/><span>${r}</span>`;
+  rl.appendChild(div);
+});
 
-function fmt(n) { return (+n).toLocaleString('es-AR'); }
-function pal(n) { return Array.from({length:n},(_,i)=>PALETTE[i%PALETTE.length]); }
-function kill(id) { if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
+// Init date inputs
+const df = document.getElementById('date-from');
+const dt = document.getElementById('date-to');
+df.value = dateFrom; dt.value = dateTo;
+df.addEventListener('change', e => { if(e.target.value.match(/^\d{4}-\d{2}$/)){dateFrom=e.target.value;renderAll();} });
+dt.addEventListener('change', e => { if(e.target.value.match(/^\d{4}-\d{2}$/)){dateTo=e.target.value;renderAll();} });
 
-function monthLabel(k) {
-  if (!k) return k;
-  const [y,m] = k.split('-');
-  return MONTHS[+m-1]+' '+y;
-}
-
-// FETCH — uses pre-aggregated views, very fast
-async function fetchAll() {
-  document.getElementById('loader').style.display = 'flex';
-  try {
-    const [mes, fuente, campana, lifecycle, status, empresa, empleados, formulario] = await Promise.all([
-      db.from('v_leads_por_mes').select('*').limit(500),
-      db.from('v_leads_por_fuente').select('*').limit(100),
-      db.from('v_leads_por_campana').select('*').limit(500),
-      db.from('v_leads_por_lifecycle').select('*').limit(100),
-      db.from('v_leads_por_status').select('*').limit(100),
-      db.from('v_leads_por_empresa').select('*').limit(50),
-      db.from('v_leads_por_empleados').select('*').limit(100),
-      db.from('v_leads_por_formulario').select('*').limit(100),
-    ]);
-
-    for (const [name, res] of [['mes',mes],['fuente',fuente],['campana',campana],['lifecycle',lifecycle],['status',status],['empresa',empresa],['empleados',empleados],['formulario',formulario]]) {
-      if (res.error) { console.error(name, res.error); alert('Error cargando '+name+': '+res.error.message); }
-      else rawData[name] = res.data || [];
-    }
-  } catch(e) {
-    alert('Error de conexion: '+e.message);
-  }
-  document.getElementById('loader').style.display = 'none';
-}
-
-// DATE FILTER helpers
-function filterByDate(rows, dateCol) {
-  if (!dateStart && !dateEnd) return rows;
-  // For aggregated views, filter by month key
-  return rows.filter(r => {
-    const k = r[dateCol];
-    if (!k) return false;
-    const d = new Date(k+'-01');
-    if (dateStart) { const s = new Date(dateStart.getFullYear(), dateStart.getMonth(), 1); if (d < s) return false; }
-    if (dateEnd) { const e = new Date(dateEnd.getFullYear(), dateEnd.getMonth(), 1); if (d > e) return false; }
-    return true;
+function toggleRegion(r, checked) {
+  if(checked) selRegions.add(r); else selRegions.delete(r);
+  document.querySelectorAll('.region-item').forEach((el,i) => {
+    el.classList.toggle('checked', selRegions.has(RAW.regions[i]));
   });
+  renderAll();
 }
 
-function getFilteredMes() { return filterByDate(rawData.mes||[], 'mes'); }
+function resetFilters() {
+  selRegions = new Set(RAW.regions);
+  dateFrom = RAW.months[0]; dateTo = RAW.months[RAW.months.length-1];
+  df.value = dateFrom; dt.value = dateTo;
+  document.querySelectorAll('.region-item input').forEach(cb => cb.checked=true);
+  document.querySelectorAll('.region-item').forEach(el => el.classList.add('checked'));
+  renderAll();
+}
 
-// NAV
-function showSection(el, id) {
-  currentSection = id;
+function filteredRecords() {
+  return RAW.records.filter(r => selRegions.has(r.region) && r.month >= dateFrom && r.month <= dateTo);
+}
+
+function aggregate(records) {
+  // Group by (campaign, channel)
+  const map = {};
+  records.forEach(r => {
+    const k = r.campaign + '|||' + r.channel;
+    if(!map[k]) map[k] = {campaign:r.campaign,channel:r.channel,leads:0,deals:0,validated:0,won:0,mrr_won:0,mrr_validated:0};
+    map[k].leads += r.leads; map[k].deals += r.deals;
+    map[k].validated += r.validated; map[k].won += r.won;
+    map[k].mrr_won += r.mrr_won; map[k].mrr_validated += r.mrr_validated;
+  });
+  return Object.values(map).map(c => ({
+    ...c,
+    spend: RAW.spend[c.campaign] || 0,
+    win_rate: c.leads ? Math.round(c.won/c.leads*1000)/10 : 0,
+    deal_rate: c.leads ? Math.round(c.deals/c.leads*1000)/10 : 0,
+    cpl: (RAW.spend[c.campaign]||0) > 0 && c.leads > 0 ? Math.round((RAW.spend[c.campaign]||0)/c.leads) : null,
+  })).sort((a,b) => b.leads - a.leads || b.spend - a.spend);
+}
+
+function aggregateByChannel(camps) {
+  const map = {};
+  camps.forEach(c => {
+    if(!map[c.channel]) map[c.channel] = {channel:c.channel,leads:0,deals:0,validated:0,won:0,mrr_won:0,mrr_validated:0,spend:0};
+    map[c.channel].leads += c.leads; map[c.channel].deals += c.deals;
+    map[c.channel].validated += c.validated; map[c.channel].won += c.won;
+    map[c.channel].mrr_won += c.mrr_won; map[c.channel].mrr_validated += c.mrr_validated;
+    map[c.channel].spend += c.spend;
+  });
+  return Object.values(map).map(c => ({...c,
+    win_rate: c.leads?Math.round(c.won/c.leads*1000)/10:0,
+    deal_rate: c.leads?Math.round(c.deals/c.leads*1000)/10:0,
+    cpl: c.spend>0&&c.leads>0?Math.round(c.spend/c.leads):null,
+  })).sort((a,b)=>b.leads-a.leads);
+}
+
+function aggregateByMonth(records) {
+  const map = {};
+  records.forEach(r => {
+    if(!map[r.month]) map[r.month]={month:r.month,leads:0,mrr_won:0};
+    map[r.month].leads += r.leads; map[r.month].mrr_won += r.mrr_won;
+  });
+  return Object.values(map).sort((a,b)=>a.month.localeCompare(b.month));
+}
+
+function fmt(n){if(n==null||n===undefined||n==='')return'—';return Number(n).toLocaleString('en-US')}
+function fmtUSD(n){if(!n||n===0)return'—';return'$'+Math.round(n).toLocaleString('en-US')}
+function fmtPct(n){if(n==null||n===undefined)return'—';return n+'%'}
+
+function chPill(ch){
+  const m={'Paid Social — LinkedIn':'pill-li','Paid Social — Facebook':'pill-fb','Paid Search — Google':'pill-goog','Direct Traffic':'pill-direct','Organic Search':'pill-organic'};
+  const cls=m[ch]||'pill-other';
+  const s=ch.replace('Paid Social — ','').replace('Paid Search — ','').replace(' Traffic','').replace(' Search','');
+  return `<span class="pill ${cls}">${s}</span>`;
+}
+
+function updateSummary() {
+  const rList = selRegions.size === RAW.regions.length ? 'All regions' : `${selRegions.size} region${selRegions.size!==1?'s':''}`;
+  const dRange = dateFrom===RAW.months[0]&&dateTo===RAW.months[RAW.months.length-1] ? 'All dates' : `${dateFrom} → ${dateTo}`;
+  document.getElementById('filter-summary').textContent = `${rList} · ${dRange}`;
+}
+
+function showSection(id, item){
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
-  document.getElementById('section-'+id).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('section-title').textContent = TITLES[id];
-  renderCurrent();
+  document.getElementById('sec-'+id).classList.add('active');
+  item.classList.add('active');
+  const titles={overview:'Overview',channels:'By Channel',campaigns:'By Campaign',paid:'Paid Analysis'};
+  document.getElementById('section-title').textContent=titles[id]||id;
 }
 
-function renderCurrent() {
-  switch(currentSection) {
-    case 'resumen':    renderResumen(); break;
-    case 'campana':    renderCampana(); break;
-    case 'calidad':    renderCalidad(); break;
-    case 'empresa':    renderEmpresa(); break;
-    case 'formulario': renderFormulario(); break;
-  }
+function totalsRow(rows, cols) {
+  // cols: array of {key, type: 'num'|'money'|'spend'|'cpl'|'pct'|'text'}
+  const sums = {};
+  cols.filter(c=>c.type!=='text'&&c.type!=='pill'&&c.type!=='pct'&&c.type!=='cpl').forEach(c=>{
+    sums[c.key] = rows.reduce((a,r)=>a+(r[c.key]||0),0);
+  });
+  return sums;
 }
 
-function applyFilter() { renderCurrent(); }
-function clearFilter() { if(picker) picker.clear(); dateStart=null; dateEnd=null; renderCurrent(); }
+function addTotalsRow(tbody, rows, colDefs) {
+  if(!rows.length) return;
+  const sums = totalsRow(rows, colDefs);
+  const tr = document.createElement('tr');
+  tr.className = 'totals-row';
+  colDefs.forEach((col,i) => {
+    const td = document.createElement('td');
+    if(col.type==='text') td.textContent = i===0 ? 'TOTAL' : '';
+    else if(col.type==='pill') td.textContent = i===0 ? 'TOTAL' : '';
+    else if(col.type==='money') td.className='td-money'; td.textContent = col.type==='money' ? fmtUSD(sums[col.key]) : col.type==='spend' ? fmtUSD(sums[col.key]) : col.type==='num' ? fmt(sums[col.key]) : col.type==='pct' ? (sums.leads?Math.round(sums[col.pctNumerator]/sums.leads*10)/10+'%':'—') : col.type==='cpl' ? (sums.spend>0&&sums.leads>0?'$'+Math.round(sums.spend/sums.leads):'—') : '';
+    tr.appendChild(td);
+  });
+  tbody.appendChild(tr);
+}
 
-// CHART builders
-function lineChart(id, labels, values) {
-  kill(id);
-  charts[id] = new Chart(document.getElementById(id), {
-    type:'line',
-    data:{ labels, datasets:[{ label:'Leads', data:values, borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.08)', borderWidth:2.5, pointRadius:3, fill:true, tension:0.3 }] },
-    options:{ responsive:true, plugins:{legend:{display:false}}, scales:{ x:{grid:{display:false},ticks:{font:{size:11},maxRotation:45}}, y:{beginAtZero:true,ticks:{font:{size:11}}} } }
+function renderTotals(tbody, rows, defs) {
+  // defs: [{key,type}]
+  const sums = {};
+  defs.forEach(d => { if(!['text','pill','pct','cpl'].includes(d.type)) sums[d.key]=(sums[d.key]||0); });
+  rows.forEach(r => defs.forEach(d => { if(!['text','pill','pct','cpl'].includes(d.type)) sums[d.key]=(sums[d.key]||0)+(r[d.key]||0); }));
+  const tr = document.createElement('tr'); tr.className='totals-row';
+  defs.forEach((d,i) => {
+    const td = document.createElement('td');
+    if(d.type==='pill'||d.type==='text') td.textContent = i===0?'TOTAL':'';
+    else if(d.type==='num') { td.className='td-num'; td.textContent=fmt(sums[d.key]); }
+    else if(d.type==='money') { td.className='td-money'; td.textContent=fmtUSD(sums[d.key]); }
+    else if(d.type==='spend') { td.className='td-spend'; td.textContent=fmtUSD(sums[d.key]); }
+    else if(d.type==='pct') { td.className='td-num'; td.textContent=sums.leads?(Math.round(sums[d.pctN]/sums.leads*10)/10)+'%':'—'; }
+    else if(d.type==='cpl') { td.className='td-cpl'; td.textContent=sums.spend>0&&sums.leads>0?'$'+Math.round(sums.spend/sums.leads):'—'; }
+    tr.appendChild(td);
+  });
+  tbody.appendChild(tr);
+}
+
+function renderKPIs(camps) {
+  const leads=camps.reduce((a,c)=>a+c.leads,0);
+  const deals=camps.reduce((a,c)=>a+c.deals,0);
+  const validated=camps.reduce((a,c)=>a+c.validated,0);
+  const won=camps.reduce((a,c)=>a+c.won,0);
+  const mrrWon=camps.reduce((a,c)=>a+c.mrr_won,0);
+  const mrrVal=camps.reduce((a,c)=>a+c.mrr_validated,0);
+  const spend=camps.reduce((a,c)=>a+c.spend,0);
+  document.getElementById('kpi-grid').innerHTML=`
+    <div class="kpi-card"><div class="kpi-label">Leads</div><div class="kpi-value">${fmt(leads)}</div><div class="kpi-sub">BOFU form fills</div></div>
+    <div class="kpi-card"><div class="kpi-label">Deals Created</div><div class="kpi-value">${fmt(deals)}</div><div class="kpi-sub">${leads?Math.round(deals/leads*10)/10:0}% of leads</div></div>
+    <div class="kpi-card"><div class="kpi-label">Validated</div><div class="kpi-value">${fmt(validated)}</div><div class="kpi-sub">${leads?Math.round(validated/leads*10)/10:0}% of leads</div></div>
+    <div class="kpi-card"><div class="kpi-label">Won</div><div class="kpi-value">${fmt(won)}</div><div class="kpi-sub">${leads?Math.round(won/leads*10)/10:0}% win rate</div></div>
+    <div class="kpi-card"><div class="kpi-label">MRR Won</div><div class="kpi-value" style="color:var(--green)">${fmtUSD(mrrWon)}</div><div class="kpi-sub">Avg ${won?fmtUSD(Math.round(mrrWon/won)):'—'}/deal</div></div>
+    <div class="kpi-card"><div class="kpi-label">MRR Validated</div><div class="kpi-value" style="color:var(--accent)">${fmtUSD(mrrVal)}</div><div class="kpi-sub">Active pipeline</div></div>
+    <div class="kpi-card"><div class="kpi-label">Paid Spend</div><div class="kpi-value" style="color:var(--purple)">${fmtUSD(spend)}</div><div class="kpi-sub">LinkedIn + Meta · USD</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avg CPL (paid)</div><div class="kpi-value" style="color:var(--orange)">${spend>0&&leads>0?fmtUSD(Math.round(spend/leads)):'—'}</div><div class="kpi-sub">Paid leads only</div></div>
+  `;
+}
+
+function renderFunnel(camps) {
+  const leads=camps.reduce((a,c)=>a+c.leads,0);
+  const deals=camps.reduce((a,c)=>a+c.deals,0);
+  const validated=camps.reduce((a,c)=>a+c.validated,0);
+  const won=camps.reduce((a,c)=>a+c.won,0);
+  const items=[{l:'Leads',v:leads,c:'#3b82f6'},{l:'Deals',v:deals,c:'#8b5cf6'},{l:'Validated',v:validated,c:'#f59e0b'},{l:'Won',v:won,c:'#10b981'}];
+  document.getElementById('funnel-chart').innerHTML=items.map(i=>`
+    <div class="funnel-row">
+      <div class="funnel-label">${i.l}</div>
+      <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${leads?Math.round(i.v/leads*100):0}%;background:${i.c}">${leads?Math.round(i.v/leads*100):0}%</div></div>
+      <div class="funnel-count">${fmt(i.v)}</div>
+      <div class="funnel-pct">${i.l==='Leads'?'base':Math.round(i.v/(leads||1)*100)+'% of leads'}</div>
+    </div>`).join('');
+}
+
+function renderCharts(camps, records) {
+  const chs = aggregateByChannel(camps).slice(0,8);
+  const labels = chs.map(c=>c.channel.replace('Paid Social — ','').replace('Paid Search — ',''));
+  const mkChart = (id, cfg) => { if(charts[id]) charts[id].destroy(); charts[id]=new Chart(document.getElementById(id),cfg); };
+
+  mkChart('channelChart',{type:'bar',data:{labels,datasets:[{label:'Leads',data:chs.map(c=>c.leads),backgroundColor:'#3b82f680',borderColor:'#3b82f6',borderWidth:1,borderRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#f1f5f9'}},x:{grid:{display:false}}},maintainAspectRatio:false}});
+  mkChart('mrrChart',{type:'bar',data:{labels,datasets:[{label:'MRR Won',data:chs.map(c=>c.mrr_won),backgroundColor:'#10b98180',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'MRR Validated',data:chs.map(c=>c.mrr_validated),backgroundColor:'#3b82f640',borderColor:'#3b82f6',borderWidth:1,borderRadius:4}]},options:{plugins:{legend:{position:'top',labels:{font:{size:11}}}},scales:{y:{beginAtZero:true,grid:{color:'#f1f5f9'}},x:{grid:{display:false}}},maintainAspectRatio:false}});
+
+  const byMonth = aggregateByMonth(records);
+  mkChart('monthChart',{type:'line',data:{labels:byMonth.map(m=>m.month),datasets:[{label:'Leads',data:byMonth.map(m=>m.leads),borderColor:'#3b82f6',backgroundColor:'#3b82f620',fill:true,tension:.3,pointRadius:4}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#f1f5f9'}},x:{grid:{display:false}}},maintainAspectRatio:false}});
+
+  const paid=chs.filter(c=>c.spend>0);
+  if(paid.length) mkChart('spendChart',{type:'doughnut',data:{labels:paid.map(c=>c.channel.replace('Paid Social — ','').replace('Paid Search — ','')),datasets:[{data:paid.map(c=>c.spend),backgroundColor:['#3b82f6','#8b5cf6','#f59e0b','#10b981'],borderWidth:2,borderColor:'#fff'}]},options:{plugins:{legend:{position:'right',labels:{font:{size:11}}}},maintainAspectRatio:false}});
+}
+
+function renderChannelTable(camps) {
+  const chs = aggregateByChannel(camps);
+  const tbody = document.getElementById('ch-tbody');
+  tbody.innerHTML = chs.map(c=>`<tr>
+    <td>${chPill(c.channel)}</td>
+    <td class="td-num">${fmt(c.leads)}</td>
+    <td class="td-num">${fmt(c.deals)}</td>
+    <td class="td-num">${fmtPct(c.deal_rate)}</td>
+    <td class="td-num">${fmt(c.validated)}</td>
+    <td class="td-num">${fmt(c.won)}</td>
+    <td class="td-num ${c.win_rate>=10?'win-hi':c.win_rate>=5?'win-mid':''}">${fmtPct(c.win_rate)}</td>
+    <td class="td-money">${fmtUSD(c.mrr_won)}</td>
+    <td class="td-money">${fmtUSD(c.mrr_validated)}</td>
+    <td class="td-spend">${fmtUSD(c.spend)}</td>
+    <td class="td-cpl">${c.cpl?'$'+c.cpl:'—'}</td>
+  </tr>`).join('');
+  const defs=[{type:'pill'},{type:'num',key:'leads'},{type:'num',key:'deals'},{type:'pct',pctN:'deals'},{type:'num',key:'validated'},{type:'num',key:'won'},{type:'pct',pctN:'won'},{type:'money',key:'mrr_won'},{type:'money',key:'mrr_validated'},{type:'spend',key:'spend'},{type:'cpl'}];
+  renderTotals(tbody, chs, defs);
+}
+
+let campFilterText = '';
+function filterCamps(v){ campFilterText=v.toLowerCase(); renderAll(); }
+
+function renderCampaignTable(camps) {
+  let rows = camps;
+  if(campFilterText) rows=rows.filter(r=>r.campaign.toLowerCase().includes(campFilterText)||r.channel.toLowerCase().includes(campFilterText));
+  const tbody = document.getElementById('camp-tbody');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--muted)">No results</td></tr>';return;}
+  tbody.innerHTML = rows.map(c=>`<tr>
+    <td>${chPill(c.channel)}</td>
+    <td class="td-camp" title="${c.campaign}">${c.campaign}</td>
+    <td class="td-num">${fmt(c.leads)}</td>
+    <td class="td-num">${fmt(c.deals)}</td>
+    <td class="td-num">${fmt(c.validated)}</td>
+    <td class="td-num">${fmt(c.won)}</td>
+    <td class="td-num ${c.win_rate>=10?'win-hi':c.win_rate>=5?'win-mid':''}">${fmtPct(c.win_rate)}</td>
+    <td class="td-money">${fmtUSD(c.mrr_won)}</td>
+    <td class="td-money">${fmtUSD(c.mrr_validated)}</td>
+    <td class="td-spend">${fmtUSD(c.spend)}</td>
+    <td class="td-cpl">${c.cpl?'$'+c.cpl:'—'}</td>
+  </tr>`).join('');
+  const defs=[{type:'pill'},{type:'text'},{type:'num',key:'leads'},{type:'num',key:'deals'},{type:'num',key:'validated'},{type:'num',key:'won'},{type:'pct',pctN:'won'},{type:'money',key:'mrr_won'},{type:'money',key:'mrr_validated'},{type:'spend',key:'spend'},{type:'cpl'}];
+  renderTotals(tbody, rows, defs);
+}
+
+function renderPaidKPIs(camps) {
+  const paid=camps.filter(c=>c.spend>0);
+  const totalSpend=paid.reduce((a,c)=>a+c.spend,0);
+  const totalLeads=paid.reduce((a,c)=>a+c.leads,0);
+  const totalMrrVal=paid.reduce((a,c)=>a+c.mrr_validated,0);
+  document.getElementById('paid-kpis').innerHTML=`
+    <div class="kpi-card"><div class="kpi-label">Total Paid Spend</div><div class="kpi-value" style="color:var(--purple)">${fmtUSD(Math.round(totalSpend))}</div><div class="kpi-sub">LinkedIn + Meta · USD</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avg CPL (paid)</div><div class="kpi-value" style="color:var(--orange)">${totalSpend>0&&totalLeads>0?fmtUSD(Math.round(totalSpend/totalLeads)):'—'}</div><div class="kpi-sub">${fmt(totalLeads)} paid leads</div></div>
+    <div class="kpi-card"><div class="kpi-label">MRR Val. from Paid</div><div class="kpi-value" style="color:var(--accent)">${fmtUSD(Math.round(totalMrrVal))}</div><div class="kpi-sub">Validated pipeline</div></div>
+  `;
+}
+
+function renderPaidTable(camps) {
+  const paid = camps.filter(c=>c.spend>0).sort((a,b)=>b.spend-a.spend);
+  const tbody = document.getElementById('paid-tbody');
+  tbody.innerHTML = paid.map(c=>`<tr>
+    <td>${chPill(c.channel)}</td>
+    <td class="td-camp" title="${c.campaign}">${c.campaign}</td>
+    <td class="td-num">${fmt(c.leads)}</td>
+    <td class="td-spend">${fmtUSD(c.spend)}</td>
+    <td class="td-cpl">${c.cpl?'$'+c.cpl:'—'}</td>
+    <td class="td-num">${fmt(c.deals)}</td>
+    <td class="td-num">${fmt(c.validated)}</td>
+    <td class="td-num">${fmt(c.won)}</td>
+    <td class="td-num ${c.win_rate>=10?'win-hi':c.win_rate>=5?'win-mid':''}">${fmtPct(c.win_rate)}</td>
+    <td class="td-money">${fmtUSD(c.mrr_won)}</td>
+    <td class="td-money">${fmtUSD(c.mrr_validated)}</td>
+  </tr>`).join('');
+  const defs=[{type:'pill'},{type:'text'},{type:'num',key:'leads'},{type:'spend',key:'spend'},{type:'cpl'},{type:'num',key:'deals'},{type:'num',key:'validated'},{type:'num',key:'won'},{type:'pct',pctN:'won'},{type:'money',key:'mrr_won'},{type:'money',key:'mrr_validated'}];
+  renderTotals(tbody, paid, defs);
+}
+
+function sortTable(tableId, colIdx){
+  const key=tableId+'_'+colIdx;
+  sortStates[key]=sortStates[key]==='asc'?'desc':'asc';
+  const asc=sortStates[key]==='asc';
+  const tbody=document.getElementById(tableId).querySelector('tbody');
+  const rows=Array.from(tbody.rows).filter(r=>!r.classList.contains('totals-row'));
+  rows.sort((a,b)=>{
+    const av=a.cells[colIdx]?.textContent.replace(/[$,%]/g,'').replace(/,/g,'').trim()||'';
+    const bv=b.cells[colIdx]?.textContent.replace(/[$,%]/g,'').replace(/,/g,'').trim()||'';
+    const an=parseFloat(av),bn=parseFloat(bv);
+    if(!isNaN(an)&&!isNaN(bn)) return asc?an-bn:bn-an;
+    return asc?av.localeCompare(bv):bv.localeCompare(av);
+  });
+  const totalsR=Array.from(tbody.rows).find(r=>r.classList.contains('totals-row'));
+  tbody.innerHTML=''; rows.forEach(r=>tbody.appendChild(r));
+  if(totalsR) tbody.appendChild(totalsR);
+  document.querySelectorAll(`#${tableId} thead th`).forEach((th,i)=>{
+    th.classList.remove('sort-asc','sort-desc');
+    if(i===colIdx) th.classList.add(asc?'sort-asc':'sort-desc');
   });
 }
 
-function barChart(id, labels, values, colors, horiz) {
-  kill(id);
-  charts[id] = new Chart(document.getElementById(id), {
-    type:'bar',
-    data:{ labels, datasets:[{ label:'Leads', data:values, backgroundColor:colors||'#3b82f6', borderRadius:4 }] },
-    options:{ indexAxis:horiz?'y':'x', responsive:true, plugins:{legend:{display:false}},
-      scales:{
-        x:{grid:horiz?{color:'#f1f5f9'}:{display:false},ticks:{font:{size:11}}},
-        y:{beginAtZero:true,grid:horiz?{display:false}:{color:'#f1f5f9'},ticks:{font:{size:11}}}
-      }
-    }
-  });
+function renderAll() {
+  updateSummary();
+  const recs = filteredRecords();
+  const camps = aggregate(recs);
+  renderKPIs(camps);
+  renderFunnel(camps);
+  renderCharts(camps, recs);
+  renderChannelTable(camps);
+  renderCampaignTable(camps);
+  renderPaidKPIs(camps);
+  renderPaidTable(camps);
 }
 
-function donut(id, labels, values, colors) {
-  kill(id);
-  charts[id] = new Chart(document.getElementById(id), {
-    type:'doughnut',
-    data:{ labels, datasets:[{ data:values, backgroundColor:colors, borderWidth:2, borderColor:'#fff', hoverOffset:6 }] },
-    options:{ responsive:true, cutout:'55%', plugins:{ legend:{ position:'right', labels:{font:{size:11},padding:10,boxWidth:12,usePointStyle:true} } } }
-  });
-}
-
-// RESUMEN
-function renderResumen() {
-  const mesData = getFilteredMes();
-  const now = new Date();
-  const thisM = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const prevDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
-  const prevM = prevDate.getFullYear()+'-'+String(prevDate.getMonth()+1).padStart(2,'0');
-
-  const total = mesData.reduce((s,r)=>s+parseInt(r.total),0);
-  const thisCount = mesData.find(r=>r.mes===thisM)?.total||0;
-  const prevCount = mesData.find(r=>r.mes===prevM)?.total||0;
-
-  const fuentes = (rawData.fuente||[]).filter(r=>r.fuente && r.fuente!=='OFFLINE');
-  const fuentesCount = fuentes.length;
-
-  document.getElementById('kpi-total').textContent = fmt(total);
-  document.getElementById('kpi-mes').textContent = fmt(thisCount);
-  document.getElementById('kpi-prev').textContent = fmt(prevCount);
-  document.getElementById('kpi-fuentes').textContent = fuentesCount;
-
-  const labels = mesData.map(r=>monthLabel(r.mes));
-  const vals = mesData.map(r=>parseInt(r.total));
-  lineChart('chart-mes', labels, vals);
-
-  const fLabels = fuentes.map(r=>r.fuente);
-  const fVals = fuentes.map(r=>parseInt(r.total));
-  barChart('chart-fuente', fLabels, fVals, pal(fLabels.length));
-}
-
-// CAMPANA
-function renderCampana() {
-  const fuenteFilter = document.getElementById('filter-fuente').value;
-  let data = rawData.campana||[];
-  if (fuenteFilter) data = data.filter(r=>r.fuente===fuenteFilter);
-
-  // Sort and top 20
-  const sorted = [...data].sort((a,b)=>parseInt(b.total)-parseInt(a.total)).slice(0,20);
-  const total = data.reduce((s,r)=>s+parseInt(r.total),0);
-  document.getElementById('badge-campana').textContent = fmt(total)+' leads con campana';
-
-  const labels = sorted.map(r=>r.campana.length>45?r.campana.slice(0,45)+'...':r.campana);
-  const vals = sorted.map(r=>parseInt(r.total));
-  barChart('chart-campana', labels, vals, pal(labels.length), true);
-}
-
-// CALIDAD
-function renderCalidad() {
-  const lc = rawData.lifecycle||[];
-  const lcFiltered = lc.filter(r=>r.etapa);
-  donut('chart-lifecycle', lcFiltered.map(r=>r.etapa), lcFiltered.map(r=>parseInt(r.total)), pal(lcFiltered.length));
-
-  const st = rawData.status||[];
-  barChart('chart-status', st.map(r=>r.status), st.map(r=>parseInt(r.total)), pal(st.length));
-}
-
-// EMPRESA
-function renderEmpresa() {
-  const emp = (rawData.empresa||[]).slice(0,15);
-  barChart('chart-empresa', emp.map(r=>r.empresa.length>30?r.empresa.slice(0,30)+'...':r.empresa), emp.map(r=>parseInt(r.total)), pal(emp.length), true);
-
-  const ORDER = ['1-10','11-50','51-200','201-500','501-1000','1001-5000','5000+'];
-  function norm(v) {
-    if (!v) return null;
-    const n = parseInt(v);
-    if (!isNaN(n)) {
-      if(n<=10)return'1-10';if(n<=50)return'11-50';if(n<=200)return'51-200';
-      if(n<=500)return'201-500';if(n<=1000)return'501-1000';if(n<=5000)return'1001-5000';return'5000+';
-    }
-    return v.trim();
-  }
-  const buckets = {};
-  for (const r of rawData.empleados||[]) {
-    const b = norm(r.empleados);
-    if (b) buckets[b]=(buckets[b]||0)+parseInt(r.total);
-  }
-  const labels = ORDER.filter(k=>buckets[k]);
-  const vals = labels.map(k=>buckets[k]);
-  // extras
-  for (const k of Object.keys(buckets)) { if (!ORDER.includes(k)) { labels.push(k); vals.push(buckets[k]); } }
-  barChart('chart-empleados', labels, vals, pal(labels.length));
-}
-
-// FORMULARIO
-function renderFormulario() {
-  const data = rawData.formulario||[];
-  barChart('chart-formulario',
-    data.map(r=>r.formulario.length>50?r.formulario.slice(0,50)+'...':r.formulario),
-    data.map(r=>parseInt(r.total)),
-    pal(data.length), true);
-}
-
-// INIT
-async function init() {
-  picker = flatpickr('#date-range', {
-    mode:'range', dateFormat:'d/m/Y', locale:{rangeSeparator:' - '},
-    onChange(dates) {
-      if (dates.length===2) { dateStart=dates[0]; dateEnd=dates[1]; }
-      else { dateStart=null; dateEnd=null; }
-    }
-  });
-  await fetchAll();
-  renderCurrent();
-}
-
-init();
+renderAll();
 </script>
 </body>
 </html>
