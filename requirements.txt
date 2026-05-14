@@ -3,7 +3,7 @@ requests
 pandas
 python-dotenv
 rich
-google-cloud-bigquery
+supabase
 python-dateutil
 beautifulsoup4
 markdownify

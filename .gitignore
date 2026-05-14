@@ -39,3 +39,9 @@ testes_anteriores
 jsons
 versoes-anteriores.md
 temp
+# Raw data exports (large files)
+*.json
+dashspy.log
+
+# Analysis outputs
+inbound_report.html

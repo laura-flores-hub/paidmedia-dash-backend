@@ -1,0 +1,95 @@
+channel,campaign_name,leads,deals_count,deal_rate_pct,validated_leads,won_deals,win_rate_pct,total_mrr_usd,validated_mrr_usd,avg_mrr_per_lead,avg_mrr_per_won,q1_leads,q1_mrr_usd,q2_leads,q2_mrr_usd
+Direct Traffic,(direct),476,266,55.9,169,25,5.3,10648,79941,22,426,271,8556,205,2092
+Organic Search,(organic),282,157,55.7,78,10,3.5,3790,39147,13,379,96,3470,186,320
+Offline,INTEGRATION,11,6,54.5,3,1,9.1,3750,4875,341,3750,8,3750,3,0
+Paid Search — Google,leads-performance max - [latam] rlsa - visitas web,28,22,78.6,14,3,10.7,1652,6398,59,551,18,1652,10,0
+Paid Search — Google,search-humand-modulos-- [argentina],28,21,75.0,15,4,14.3,1495,8877,53,374,22,1495,6,0
+Paid Search — Google,trafic-search-brand- [argentina],121,76,62.8,59,3,2.5,776,24547,6,259,74,776,47,0
+Paid Search — Google,leads-performance max - [argentina],42,26,61.9,18,2,4.8,695,5567,17,348,20,695,22,0
+Paid Social — Facebook,prode,195,84,43.1,55,1,0.5,600,4726,3,600,93,0,102,600
+Paid Search — Google,search-humand-modulos- [mexico],25,22,88.0,14,1,4.0,400,10875,16,400,21,400,4,0
+Paid Search — Google,trafic-search-general- [mexico],26,17,65.4,10,1,3.8,375,16368,14,375,19,375,7,0
+Paid Search — Google,trafic-search-general-arg,32,26,81.2,14,1,3.1,289,6031,9,289,21,289,11,0
+Paid Search — Google,trafic-search-brand- [españa],1,1,100.0,1,1,100.0,240,240,240,240,0,0,1,240
+Referrals,statics.teams.cdn.office.net,7,6,85.7,4,1,14.3,200,560,29,200,2,200,5,0
+Paid Search — Google,trafic-search-brand- [mexico],22,11,50.0,8,1,4.5,180,4540,8,180,16,180,6,0
+Paid Search — Google,gads_lead_gen_bofu_hispam_panama_guatemala_search_competitors,1,1,100.0,1,1,100.0,70,70,70,70,0,0,1,70
+Paid Search — Google,Auto-tagged PPC,7,2,28.6,0,0,0.0,0,0,0,0,7,0,0,0
+Paid Search — Google,leads-performance max - [ee.uu] - high,6,0,0.0,0,0,0.0,0,0,0,0,6,0,0,0
+Paid Social — LinkedIn,psp_lnknd_lead_gen sponsored messaging partnership - público referral bogota/lima,1,0,0.0,0,0,0.0,0,0,0,0,1,0,0,0
+Paid Social — LinkedIn,lnknd_lead_gen sponsored messaging [bofu] - argentina latam,56,12,21.4,8,0,0.0,0,4743,0,0,53,0,3,0
+Paid Search — Google,conversion-search-humand-modulos- [colombia],41,24,58.5,9,0,0.0,0,4961,0,0,34,0,7,0
+Paid Social — LinkedIn,lnknd_lead_gen sponsored messaging [bofu] - peru latam,36,3,8.3,2,0,0.0,0,4030,0,0,31,0,5,0
+Paid Search — Google,trafic-search-brand- [peru],7,3,42.9,1,0,0.0,0,1800,0,0,6,0,1,0
+Paid Search — Google,conversion-search-humand-modulos- [ee.uu],1,0,0.0,0,0,0.0,0,0,0,0,1,0,0,0
+Referrals,help.humand.co,14,3,21.4,1,0,0.0,0,600,0,0,10,0,4,0
+Paid Search — Google,conversion-search-competencias - [colombia],11,7,63.6,5,0,0.0,0,5711,0,0,11,0,0,0
+Paid Social — LinkedIn,lnknd_lead_gen sponsored messaging [bofu] - colombia latam,62,8,12.9,4,0,0.0,0,5380,0,0,55,0,7,0
+Paid Search — Google,trafic-search-competencias- [mexico],15,10,66.7,6,0,0.0,0,5285,0,0,8,0,7,0
+Paid Search — Google,leads-performance max- [peru],21,11,52.4,3,0,0.0,0,1790,0,0,10,0,11,0
+Paid Search — Google,conversion-search-brand - [colombia],19,10,52.6,7,0,0.0,0,4970,0,0,14,0,5,0
+Paid Search — Google,conversion-search-general- [colombia],31,21,67.7,10,0,0.0,0,6571,0,0,24,0,7,0
+Paid Search — Google,trafic-search-brand- [ee.uu],2,1,50.0,0,0,0.0,0,0,0,0,2,0,0,0
+Paid Search — Google,search-humand-modulos- [peru],42,20,47.6,11,0,0.0,0,9460,0,0,30,0,12,0
+Offline,EXTENSION,5,0,0.0,0,0,0.0,0,0,0,0,5,0,0,0
+Referrals,admin.humand.co,1,0,0.0,0,0,0.0,0,0,0,0,1,0,0,0
+Paid Search — Google,leads-performance max- [mexico],11,5,45.5,1,0,0.0,0,1000,0,0,7,0,4,0
+Paid Search — Google,trafic-search-competencias-- [argentina],10,6,60.0,4,0,0.0,0,2680,0,0,8,0,2,0
+Paid Search — Google,leads-performance max- [colombia],24,9,37.5,5,0,0.0,0,3388,0,0,14,0,10,0
+Paid Search — Google,trafic-search-general- [peru],24,17,70.8,10,0,0.0,0,5594,0,0,18,0,6,0
+Paid Social — LinkedIn,lnknd_lead_gen sponsored messaging [bofu] - mexico latam,22,7,31.8,7,0,0.0,0,8750,0,0,20,0,2,0
+Offline,CRM_UI,5,3,60.0,0,0,0.0,0,0,0,0,4,0,1,0
+Paid Search — Google,trafic-search-competencias- [peru],12,9,75.0,5,0,0.0,0,12190,0,0,9,0,3,0
+Referrals,accounts.google.com,4,1,25.0,0,0,0.0,0,0,0,0,4,0,0,0
+Referrals,app.humand.co,8,0,0.0,0,0,0.0,0,0,0,0,4,0,4,0
+Paid Social — LinkedIn,lnknd_lead_gen sponsored messaging [bofu] - panamá latam,18,3,16.7,0,0,0.0,0,0,0,0,16,0,2,0
+Paid Social — LinkedIn,post22/1-imagenstreamlineyourworkday-latam,1,1,100.0,1,0,0.0,0,200,0,0,1,0,0,0
+Social Media,YouTube,42,10,23.8,1,0,0.0,0,0,0,0,1,0,41,0
+Social Media,Instagram,95,53,55.8,26,0,0.0,0,1006,0,0,11,0,84,0
+Social Media,LinkedIn,8,6,75.0,3,0,0.0,0,1865,0,0,5,0,3,0
+Social Media,Twitter,1,1,100.0,1,0,0.0,0,157,0,0,1,0,0,0
+Referrals,humand.com.ar,1,0,0.0,0,0,0.0,0,0,0,0,1,0,0,0
+Paid Social — Facebook,120239008734020080,2,2,100.0,2,0,0.0,0,0,0,0,2,0,0,0
+Paid Social — Facebook,whatsapp_arg,1,1,100.0,0,0,0.0,0,0,0,0,1,0,0,0
+Paid Search — Google,gads_lead_gen_bofu_brazil_nordic_display_interests,1,0,0.0,0,0,0.0,0,0,0,0,1,0,0,0
+AI Referrals,chatgpt.com,3,1,33.3,1,0,0.0,0,562,0,0,1,0,2,0
+Social Media,Facebook,21,9,42.9,6,0,0.0,0,0,0,0,1,0,20,0
+Other Campaigns,investmentseriesa,3,1,33.3,0,0,0.0,0,0,0,0,3,0,0,0
+Offline,PRESENTATIONS,1,1,100.0,0,0,0.0,0,0,0,0,1,0,0,0
+Paid Social — Facebook,prode_mx,193,110,57.0,60,0,0.0,0,6496,0,0,9,0,184,0
+Paid Social — LinkedIn,si-seriea-colperúpanguat-reach,1,1,100.0,1,0,0.0,0,1000,0,0,1,0,0,0
+Offline,IMPORT,1,1,100.0,0,0,0.0,0,0,0,0,1,0,0,0
+Paid Social — Facebook,120240130486500080,9,6,66.7,2,0,0.0,0,0,0,0,0,0,9,0
+Referrals,humand.es,4,4,100.0,2,0,0.0,0,0,0,0,0,0,4,0
+Paid Social — LinkedIn,psp_lnknd_lead_gen sponsoredmessagingpartnership-argentina,1,1,100.0,1,0,0.0,0,150,0,0,0,0,1,0
+Paid Social — Facebook,leads[bofu]-meta-na,1,0,0.0,0,0,0.0,0,0,0,0,0,0,1,0
+Referrals,padlet.com,1,1,100.0,1,0,0.0,0,300,0,0,0,0,1,0
+Paid Social — Facebook,120241151770720080,5,2,40.0,1,0,0.0,0,110,0,0,0,0,5,0
+Other Campaigns,hrmanagement,2,1,50.0,0,0,0.0,0,0,0,0,0,0,2,0
+Paid Search — Google,gads_lead_gen_bofu_hispam_argentina_search_funcionalidadesrrhh,1,1,100.0,0,0,0.0,0,0,0,0,0,0,1,0
+Paid Search — Google,gads_lead_gen_bofu_hispam_panama_guatemala_search_general,3,1,33.3,0,0,0.0,0,0,0,0,0,0,3,0
+Other Campaigns,emea-leads-prode-worlcup-demourlconversion,1,0,0.0,0,0,0.0,0,0,0,0,0,0,1,0
+Paid Search — Google,gads_lead_gen_bofu_hispam_argentina_search_prode,10,5,50.0,2,0,0.0,0,0,0,0,0,0,10,0
+Other Campaigns,prode,14,7,50.0,5,0,0.0,0,0,0,0,0,0,14,0
+Other Campaigns,leads-prode-colombia,105,42,40.0,18,0,0.0,0,453,0,0,0,0,105,0
+Other Campaigns,leads-prode-mexico,58,27,46.6,11,0,0.0,0,300,0,0,0,0,58,0
+Other Campaigns,leads-prode-argentina,85,30,35.3,15,0,0.0,0,585,0,0,0,0,85,0
+Email Marketing,25030938-newsletter,2,0,0.0,0,0,0.0,0,0,0,0,0,0,2,0
+Paid Search — Google,gads_lead_gen_bofu_hispam_mexico_search_quiniela,7,3,42.9,2,0,0.0,0,0,0,0,0,0,7,0
+Other Campaigns,{{campaign.name}},7,3,42.9,2,0,0.0,0,0,0,0,0,0,7,0
+Paid Search — Google,25030938-newsletter,2,1,50.0,0,0,0.0,0,0,0,0,0,0,2,0
+Paid Social — LinkedIn,[campaign.name],2,2,100.0,2,0,0.0,0,5800,0,0,0,0,2,0
+Paid Search — Google,gads_lead_gen_bofu_hispam_colombia_search_polla,4,2,50.0,0,0,0.0,0,0,0,0,0,0,4,0
+Other Campaigns,meta,4,4,100.0,3,0,0.0,0,0,0,0,0,0,4,0
+Paid Search — Google,gads_lead_gen_bofu_hispam_argentina_search_whatsapp,1,0,0.0,0,0,0.0,0,0,0,0,0,0,1,0
+Email Marketing,43776811-prode,5,1,20.0,1,0,0.0,0,0,0,0,0,0,5,0
+Referrals,ticktick.com,1,0,0.0,0,0,0.0,0,0,0,0,0,0,1,0
+Other Campaigns,copilot.com,2,0,0.0,0,0,0.0,0,0,0,0,0,0,2,0
+Paid Search — Google,gads_lead_gen_bofu_hispam_colombia_search_funcionalidadesrrhh,1,0,0.0,0,0,0.0,0,0,0,0,0,0,1,0
+Other Campaigns,encuestas,2,0,0.0,0,0,0.0,0,0,0,0,0,0,2,0
+Referrals,app.hubspot.com,1,0,0.0,0,0,0.0,0,0,0,0,0,0,1,0
+Paid Search — Google,gads_lead_gen_bofu_hispam_panama_guatemala_pmax,1,1,100.0,0,0,0.0,0,0,0,0,0,0,1,0
+Paid Search — Google,gads_lead_gen_bofu_hispam_panama_guatemala_search_gestion-de-rrhh,1,0,0.0,0,0,0.0,0,0,0,0,0,0,1,0
+Paid Search — Google,gads_lead_gen_bofu_hispam_argentina_search_ia,1,1,100.0,0,0,0.0,0,0,0,0,0,0,1,0
+
+TOTAL,,2532,1281,50.6,732,56,2.2,25161,320649,10,449,1135,21838,1397,3322
