@@ -471,7 +471,7 @@ function filterCamps(v){ campFilterText=v.toLowerCase(); renderAll(); }
 
 function renderCampaignTable(camps) {
   let rows = camps;
-  if(campFilterText) rows=rows.filter(r=>r.campaign.toLowerCase().includes(campFilterText)||r.channel.toLowerCase().includes(campFilterText));
+  if(campFilterText) rows=rows.filter(r=>r.campaign.toLowerCase().includes(campFilterText));
   const tbody = document.getElementById('camp-tbody');
   if(!rows.length){tbody.innerHTML='<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--muted)">No results</td></tr>';return;}
   tbody.innerHTML = rows.map(c=>`<tr>
