@@ -35,24 +35,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .topbar{background:var(--card);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
 .topbar h2{font-size:15px;font-weight:700}
 .topbar-right{display:flex;align-items:center;gap:10px}
-.filter-summary{font-size:11px;color:var(--muted);background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:4px 10px}
-.filters-menu{position:relative}
-.filters-btn{border:1px solid var(--border);background:#fff;color:var(--text);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer}
-.filters-btn:hover{border-color:#cbd5e1}
-.filters-dropdown{display:none;position:absolute;right:0;top:38px;z-index:20;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);padding:12px;min-width:340px}
-.filters-dropdown.open{display:block}
-.filters-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.sf-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
-.date-inputs{display:flex;flex-direction:column;gap:6px}
-.top-filter-input{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text);font-size:12px;outline:none}
+.filter-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.date-inputs-inline{display:flex;align-items:center;gap:5px}
+.date-sep{color:var(--muted);font-size:12px}
+.top-filter-input{width:105px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text);font-size:12px;outline:none}
 .top-filter-input:focus{border-color:#3b82f6}
-.region-list{display:flex;flex-direction:column;gap:4px;max-height:170px;overflow-y:auto;border:1px solid #f1f5f9;border-radius:6px;padding:6px}
-.region-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;color:var(--muted);font-size:11px;transition:background .1s}
-.region-item:hover{background:#f8fafc}
-.region-item input{accent-color:#3b82f6;cursor:pointer}
-.region-item.checked{color:var(--text)}
-.reset-btn{width:100%;margin-top:10px;padding:6px;border-radius:6px;border:1px solid var(--border);background:#fff;color:var(--muted);font-size:11px;cursor:pointer;transition:all .12s}
-.reset-btn:hover{border-color:#3b82f6;color:#1d4ed8}
+.ms-wrap{position:relative}
+.ms-btn{border:1px solid var(--border);background:#fff;color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:4px}
+.ms-btn:hover{border-color:#94a3b8}
+.ms-btn strong{font-weight:600;color:#1d4ed8}
+.ms-caret{color:var(--muted);font-size:10px}
+.ms-panel{display:none;position:absolute;right:0;top:34px;z-index:30;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow);padding:6px;min-width:200px;max-height:280px;overflow-y:auto}
+.ms-panel.open{display:block}
+.ms-all-row{display:flex;align-items:center;gap:6px;padding:5px 6px;border-bottom:1px solid #f1f5f9;margin-bottom:4px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text)}
+.ms-all-row input{accent-color:#3b82f6;cursor:pointer}
+.ms-item{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:4px;font-size:11px;color:var(--muted)}
+.ms-item.checked{color:var(--text)}
+.ms-item:hover{background:#f8fafc}
+.ms-item input{accent-color:#3b82f6;cursor:pointer}
+.ms-only{margin-left:auto;font-size:10px;color:#94a3b8;cursor:pointer;padding:1px 5px;border:1px solid #e2e8f0;border-radius:3px;background:#f8fafc;flex-shrink:0}
+.ms-only:hover{color:#3b82f6;border-color:#3b82f6;background:#eff6ff}
+.reset-btn-inline{border:1px solid var(--border);background:#fff;color:var(--muted);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer}
+.reset-btn-inline:hover{border-color:#3b82f6;color:#1d4ed8}
 
 .content{padding:20px 24px;flex:1}
 .section{display:none}
@@ -151,29 +155,21 @@ tbody td{padding:8px 12px;white-space:nowrap}
   <div class="topbar">
     <h2 id="section-title">Overview</h2>
     <div class="topbar-right">
-      <div class="filter-summary" id="filter-summary">All regions · All dates</div>
-      <div class="filters-menu">
-        <button class="filters-btn" onclick="toggleFiltersMenu()" id="filters-toggle">Filters</button>
-        <div class="filters-dropdown" id="filters-dropdown">
-          <div class="filters-grid">
-            <div>
-              <div class="sf-label">Date Range</div>
-              <div class="date-inputs">
-                <input class="top-filter-input" id="date-from" placeholder="From (YYYY-MM)" maxlength="7"/>
-                <input class="top-filter-input" id="date-to" placeholder="To (YYYY-MM)" maxlength="7"/>
-              </div>
-            </div>
-            <div>
-              <div class="sf-label">Region</div>
-              <div class="region-list" id="region-list"></div>
-            </div>
-            <div>
-              <div class="sf-label">Channel</div>
-              <div class="region-list" id="channel-list"></div>
-            </div>
-          </div>
-          <button class="reset-btn" onclick="resetFilters()">Reset filters</button>
+      <div class="filter-bar">
+        <div class="date-inputs-inline">
+          <input class="top-filter-input" id="date-from" placeholder="From (YYYY-MM)" maxlength="7"/>
+          <span class="date-sep">→</span>
+          <input class="top-filter-input" id="date-to" placeholder="To (YYYY-MM)" maxlength="7"/>
         </div>
+        <div class="ms-wrap" id="ms-region">
+          <button class="ms-btn" onclick="toggleMS('region')">Region: <strong id="ms-region-label">All</strong><span class="ms-caret">▾</span></button>
+          <div class="ms-panel" id="ms-region-panel"></div>
+        </div>
+        <div class="ms-wrap" id="ms-channel">
+          <button class="ms-btn" onclick="toggleMS('channel')">Channel: <strong id="ms-channel-label">All</strong><span class="ms-caret">▾</span></button>
+          <div class="ms-panel" id="ms-channel-panel"></div>
+        </div>
+        <button class="reset-btn-inline" onclick="resetFilters()">Reset</button>
       </div>
     </div>
   </div>
@@ -290,23 +286,25 @@ let dataPerspective = 'api-first';
 let sortStates = {};
 let charts = {};
 
-// Init region checkboxes
-const rl = document.getElementById('region-list');
-RAW.regions.forEach(r => {
-  const div = document.createElement('div');
-  div.className = 'region-item checked';
-  div.innerHTML = `<input type="checkbox" checked onchange="toggleRegion('${r}',this.checked)"/><span>${r}</span>`;
-  rl.appendChild(div);
-});
-
-// Init channel checkboxes
-const cl = document.getElementById('channel-list');
-ALL_CHANNELS.forEach(ch => {
-  const div = document.createElement('div');
-  div.className = 'region-item checked';
-  div.innerHTML = `<input type="checkbox" checked onchange="toggleChannel('${ch.replace(/'/g,"\'")}',this.checked)"/><span>${ch}</span>`;
-  cl.appendChild(div);
-});
+// Build multi-select panels
+function buildMS(panelId, items, type) {
+  const panel = document.getElementById(panelId);
+  const allRow = document.createElement('div');
+  allRow.className = 'ms-all-row';
+  allRow.innerHTML = `<input type="checkbox" id="ms-${type}-all" checked><span>All</span>`;
+  allRow.querySelector('input').addEventListener('change', e => toggleAllMS(type, e.target.checked));
+  panel.appendChild(allRow);
+  items.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'ms-item checked';
+    div.innerHTML = `<input type="checkbox" checked><span>${item}</span><button class="ms-only">Only</button>`;
+    div.querySelector('input').addEventListener('change', e => toggleMSItem(type, item, e.target.checked));
+    div.querySelector('.ms-only').addEventListener('click', e => { e.stopPropagation(); onlyMS(type, item); });
+    panel.appendChild(div);
+  });
+}
+buildMS('ms-region-panel', RAW.regions, 'region');
+buildMS('ms-channel-panel', ALL_CHANNELS, 'channel');
 
 // Init date inputs
 const df = document.getElementById('date-from');
@@ -315,14 +313,17 @@ df.value = dateFrom; dt.value = dateTo;
 df.addEventListener('change', e => { if(e.target.value.match(/^\d{4}-\d{2}$/)){dateFrom=e.target.value;renderAll();} });
 dt.addEventListener('change', e => { if(e.target.value.match(/^\d{4}-\d{2}$/)){dateTo=e.target.value;renderAll();} });
 
-function toggleFiltersMenu() {
-  document.getElementById('filters-dropdown').classList.toggle('open');
+function toggleMS(type) {
+  const panel = document.getElementById(`ms-${type}-panel`);
+  panel.classList.toggle('open');
+  ['region','channel'].filter(t=>t!==type).forEach(t=>document.getElementById(`ms-${t}-panel`).classList.remove('open'));
 }
 
 document.addEventListener('click', e => {
-  const menu = document.querySelector('.filters-menu');
-  if (!menu || menu.contains(e.target)) return;
-  document.getElementById('filters-dropdown').classList.remove('open');
+  ['region','channel'].forEach(type => {
+    const wrap = document.getElementById(`ms-${type}`);
+    if (wrap && !wrap.contains(e.target)) document.getElementById(`ms-${type}-panel`).classList.remove('open');
+  });
 });
 
 function setPerspective(mode) {
@@ -335,29 +336,49 @@ function setPerspective(mode) {
   renderAll();
 }
 
-function toggleRegion(r, checked) {
-  if(checked) selRegions.add(r); else selRegions.delete(r);
-  document.querySelectorAll('.region-item').forEach((el,i) => {
-    el.classList.toggle('checked', selRegions.has(RAW.regions[i]));
-  });
-  renderAll();
+function toggleAllMS(type, checked) {
+  const items = type==='region' ? RAW.regions : ALL_CHANNELS;
+  const sel = type==='region' ? selRegions : selChannels;
+  if(checked) items.forEach(i=>sel.add(i)); else sel.clear();
+  syncMS(type); renderAll();
 }
 
-function toggleChannel(ch, checked) {
-  if(checked) selChannels.add(ch); else selChannels.delete(ch);
-  document.querySelectorAll('#channel-list .region-item').forEach((el,i) => {
-    el.classList.toggle('checked', selChannels.has(ALL_CHANNELS[i]));
+function toggleMSItem(type, item, checked) {
+  const sel = type==='region' ? selRegions : selChannels;
+  if(checked) sel.add(item); else sel.delete(item);
+  syncMS(type); renderAll();
+}
+
+function onlyMS(type, item) {
+  const sel = type==='region' ? selRegions : selChannels;
+  sel.clear(); sel.add(item);
+  syncMS(type); renderAll();
+}
+
+function syncMS(type) {
+  const items = type==='region' ? RAW.regions : ALL_CHANNELS;
+  const sel = type==='region' ? selRegions : selChannels;
+  const panel = document.getElementById(`ms-${type}-panel`);
+  const allCb = document.getElementById(`ms-${type}-all`);
+  allCb.checked = sel.size === items.length;
+  allCb.indeterminate = sel.size > 0 && sel.size < items.length;
+  panel.querySelectorAll('.ms-item').forEach((el,i) => {
+    const has = sel.has(items[i]);
+    el.querySelector('input').checked = has;
+    el.classList.toggle('checked', has);
   });
-  renderAll();
+  const lbl = document.getElementById(`ms-${type}-label`);
+  if(sel.size === items.length) lbl.textContent = 'All';
+  else if(sel.size === 1) lbl.textContent = [...sel][0].replace('Paid Social — ','').replace('Paid Search — ','');
+  else lbl.textContent = `${sel.size} selected`;
 }
 
 function resetFilters() {
   selRegions = new Set(RAW.regions);
+  selChannels = new Set(ALL_CHANNELS);
   dateFrom = RAW.months[0]; dateTo = RAW.months[RAW.months.length-1];
   df.value = dateFrom; dt.value = dateTo;
-  document.querySelectorAll('.region-item input').forEach(cb => cb.checked=true);
-  document.querySelectorAll('.region-item').forEach(el => el.classList.add('checked'));
-  selChannels = new Set(ALL_CHANNELS);
+  syncMS('region'); syncMS('channel');
   renderAll();
 }
 
@@ -449,12 +470,7 @@ function chPill(ch){
   return `<span class="pill ${cls}">${s}</span>`;
 }
 
-function updateSummary() {
-  const rList = selRegions.size === RAW.regions.length ? 'All regions' : `${selRegions.size} region${selRegions.size!==1?'s':''}`;
-  const dRange = dateFrom===RAW.months[0]&&dateTo===RAW.months[RAW.months.length-1] ? 'All dates' : `${dateFrom} → ${dateTo}`;
-  const chList = selChannels.size === ALL_CHANNELS.length ? 'All channels' : `${selChannels.size} channel${selChannels.size!==1?'s':''}`;
-  document.getElementById('filter-summary').textContent = `${rList} · ${dRange} · ${chList}`;
-}
+
 
 function showSection(id, item){
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
@@ -712,7 +728,7 @@ function sortTable(tableId, colIdx){
 }
 
 function renderAll() {
-  updateSummary();
+  
   const recs = filteredRecords();
   const camps = aggregate(recs);
   renderKPIs(camps);
