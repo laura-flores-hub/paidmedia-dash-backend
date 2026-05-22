@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Chart Visualization Demo — AntV G2</title>
+<script src="https://cdn.jsdelivr.net/npm/@antv/g2@5.2.10/dist/g2.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#fafafa;color:#111113;padding:32px;-webkit-font-smoothing:antialiased}
+h1{font-size:28px;font-weight:700;letter-spacing:-.03em;margin-bottom:8px}
+.subtitle{font-size:14px;color:#636271;margin-bottom:40px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.card{background:#fff;border-radius:14px;border:1px solid rgba(0,0,0,.06);padding:24px}
+.card.full{grid-column:1/-1}
+.card h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#636271;margin-bottom:20px}
+.chart-wrap{height:320px}
+.chart-wrap-sm{height:260px}
+</style>
+</head>
+<body>
+<h1>Chart Visualization — AntV G2 Demo</h1>
+<p class="subtitle">Datos reales del dashboard · Humand 2026</p>
+
+<div class="grid">
+
+  <div class="card full">
+    <h2>Leads por Mes y Canal (Grouped Bar)</h2>
+    <div id="c1" class="chart-wrap"></div>
+  </div>
+
+  <div class="card">
+    <h2>Distribución de Spend por Canal (Donut)</h2>
+    <div id="c2" class="chart-wrap"></div>
+  </div>
+
+  <div class="card">
+    <h2>Funnel de Conversión (Bar Horizontal)</h2>
+    <div id="c3" class="chart-wrap"></div>
+  </div>
+
+  <div class="card">
+    <h2>CPL vs Leads por Campaña (Scatter)</h2>
+    <div id="c4" class="chart-wrap"></div>
+  </div>
+
+  <div class="card">
+    <h2>MRR Won vs MRR Validated por Mes (Area)</h2>
+    <div id="c5" class="chart-wrap"></div>
+  </div>
+
+</div>
+
+<script>
+const LEADS_BAR = [{"month":"2026-01","channel":"Facebook","leads":0},{"month":"2026-01","channel":"Google","leads":187},{"month":"2026-01","channel":"LinkedIn","leads":114},{"month":"2026-01","channel":"Direct Traffic","leads":87},{"month":"2026-02","channel":"Facebook","leads":26},{"month":"2026-02","channel":"Google","leads":198},{"month":"2026-02","channel":"LinkedIn","leads":79},{"month":"2026-02","channel":"Direct Traffic","leads":127},{"month":"2026-03","channel":"Facebook","leads":190},{"month":"2026-03","channel":"Google","leads":170},{"month":"2026-03","channel":"LinkedIn","leads":59},{"month":"2026-03","channel":"Direct Traffic","leads":149},{"month":"2026-04","channel":"Facebook","leads":600},{"month":"2026-04","channel":"Google","leads":172},{"month":"2026-04","channel":"LinkedIn","leads":77},{"month":"2026-04","channel":"Direct Traffic","leads":146},{"month":"2026-05","channel":"Facebook","leads":240},{"month":"2026-05","channel":"Google","leads":135},{"month":"2026-05","channel":"LinkedIn","leads":24},{"month":"2026-05","channel":"Direct Traffic","leads":140}];
+
+const SPEND_DONUT = [{"channel":"Google","spend":230219},{"channel":"LinkedIn","spend":150525},{"channel":"Facebook","spend":38428}];
+
+const FUNNEL = [{"stage":"Leads","count":3615},{"stage":"Deals","count":1690},{"stage":"Validated","count":979},{"stage":"Won","count":69}];
+
+const SCATTER = [{"campaign":"leadscampaign-brasil","leads":147,"cpl":26},{"campaign":"leads-prode-colombia","leads":117,"cpl":33},{"campaign":"leads-prode-argentina","leads":93,"cpl":74},{"campaign":"leads[bofu]-meta-na","leads":71,"cpl":209},{"campaign":"leads-prode-mexico","leads":66,"cpl":33},{"campaign":"lnknd bofu argentina","leads":72,"cpl":123},{"campaign":"leads-prode-brasil","leads":27,"cpl":107},{"campaign":"lnknd bofu colombia","leads":69,"cpl":138},{"campaign":"lnknd bofu peru","leads":53,"cpl":145},{"campaign":"lnkdn bofu emea","leads":18,"cpl":260},{"campaign":"gads brazil brand","leads":38,"cpl":172},{"campaign":"lnkdn mexico bofu","leads":20,"cpl":174},{"campaign":"leads_bofu_na_seriea","leads":12,"cpl":200},{"campaign":"gads hispam colombia","leads":7,"cpl":30},{"campaign":"gads hispam mexico","leads":8,"cpl":130}];
+
+const MRR = [{"month":"2026-01","mrr_won":7405,"mrr_val":101841},{"month":"2026-02","mrr_won":9247,"mrr_val":115014},{"month":"2026-03","mrr_won":7330,"mrr_val":111016},{"month":"2026-04","mrr_won":4112,"mrr_val":118702},{"month":"2026-05","mrr_won":0,"mrr_val":21304}];
+
+// 1. Grouped bar — leads by month & channel
+const c1 = new G2.Chart({ container: 'c1', autoFit: true });
+c1.options({
+  type: 'interval',
+  data: LEADS_BAR,
+  encode: { x: 'month', y: 'leads', color: 'channel' },
+  transform: [{ type: 'dodgeX' }],
+  scale: { color: { range: ['#5046e5','#886bff','#c8c3fa','#cbcdd6'] } },
+  axis: { x: { labelFontFamily: 'DM Sans' }, y: { labelFontFamily: 'JetBrains Mono' } },
+  style: { radiusTopLeft: 3, radiusTopRight: 3 },
+  legend: { color: { position: 'top' } },
+});
+c1.render();
+
+// 2. Donut — spend by channel
+const c2 = new G2.Chart({ container: 'c2', autoFit: true });
+c2.options({
+  type: 'interval',
+  data: SPEND_DONUT,
+  encode: { y: 'spend', color: 'channel' },
+  transform: [{ type: 'stackY' }],
+  coordinate: { type: 'theta', innerRadius: 0.55 },
+  scale: { color: { range: ['#5046e5','#886bff','#c8c3fa'] } },
+  labels: [{ text: d => `${d.channel}\n$${(d.spend/1000).toFixed(0)}k`, position: 'outside' }],
+  legend: false,
+  style: { stroke: '#fff', lineWidth: 2 },
+});
+c2.render();
+
+// 3. Funnel — horizontal bar
+const c3 = new G2.Chart({ container: 'c3', autoFit: true });
+c3.options({
+  type: 'interval',
+  data: FUNNEL,
+  encode: { x: 'count', y: 'stage', color: 'stage' },
+  coordinate: { transform: [{ type: 'transpose' }] },
+  scale: {
+    y: { domain: ['Leads','Deals','Validated','Won'] },
+    color: { range: ['#2c35a1','#5046e5','#886bff','#c8c3fa'] }
+  },
+  axis: { x: { labelFontFamily: 'JetBrains Mono' } },
+  labels: [{ text: d => d.count.toLocaleString(), position: 'right', style: { fontFamily: 'JetBrains Mono', fontWeight: 600 } }],
+  legend: false,
+  style: { radiusTopRight: 4, radiusBottomRight: 4 },
+});
+c3.render();
+
+// 4. Scatter — CPL vs Leads
+const c4 = new G2.Chart({ container: 'c4', autoFit: true });
+c4.options({
+  type: 'point',
+  data: SCATTER,
+  encode: { x: 'leads', y: 'cpl', size: 'leads', color: 'cpl' },
+  scale: {
+    size: { range: [4, 20] },
+    color: { type: 'sequential', palette: 'blues' },
+  },
+  axis: {
+    x: { title: 'Leads', labelFontFamily: 'JetBrains Mono' },
+    y: { title: 'CPL (USD)', labelFontFamily: 'JetBrains Mono' }
+  },
+  tooltip: { items: [
+    { field: 'campaign', name: 'Campaña' },
+    { field: 'leads', name: 'Leads' },
+    { field: 'cpl', name: 'CPL', valueFormatter: v => '$' + v },
+  ]},
+  legend: false,
+  style: { fillOpacity: 0.8 },
+});
+c4.render();
+
+// 5. Area — MRR by month
+const mrrFlat = [];
+MRR.forEach(d => {
+  mrrFlat.push({ month: d.month, value: d.mrr_val, type: 'MRR Validated' });
+  mrrFlat.push({ month: d.month, value: d.mrr_won, type: 'MRR Won' });
+});
+
+const c5 = new G2.Chart({ container: 'c5', autoFit: true });
+c5.options({
+  type: 'area',
+  data: mrrFlat,
+  encode: { x: 'month', y: 'value', color: 'type' },
+  scale: { color: { range: ['#c8c3fa','#5046e5'] } },
+  style: { fillOpacity: 0.6 },
+  axis: { y: { labelFontFamily: 'JetBrains Mono', labelFormatter: v => '$' + (v/1000).toFixed(0) + 'k' } },
+  legend: { color: { position: 'top' } },
+});
+c5.render();
+</script>
+</body>
+</html>

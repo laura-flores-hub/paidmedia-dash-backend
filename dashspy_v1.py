@@ -287,10 +287,12 @@ def send_meta(sb: Client, rows: list[dict]) -> None:
 #         dt_h_recording_data (TIMESTAMP)
 # ---------------------------------------------------------------------------
 
+GOOGLE_CUSTOMER_IDS = ["1805339996", "9474287342", "6935705652", "4802217233"]
+
 def fetch_google_ads(data_inicial: str, data_final: str) -> list[dict]:
     """
     Busca gastos por campanha na Google Ads API para o intervalo informado.
-    Utiliza google-ads Python library com search_stream.
+    Itera todas as sub-contas sob o manager account.
     """
     log.info("Google Ads: buscando de %s até %s.", data_inicial, data_final)
 
@@ -304,24 +306,30 @@ def fetch_google_ads(data_inicial: str, data_final: str) -> list[dict]:
             metrics.cost_micros
         FROM campaign
         WHERE segments.date BETWEEN '{data_inicial}' AND '{data_final}'
+          AND metrics.cost_micros > 0
         ORDER BY segments.date DESC
     """
 
-    customer_id = client.login_customer_id
     records: list[dict] = []
-    stream = ga_service.search_stream(customer_id=customer_id, query=query)
+    for customer_id in GOOGLE_CUSTOMER_IDS:
+        try:
+            stream = ga_service.search_stream(customer_id=customer_id, query=query)
+            count = 0
+            for batch in stream:
+                for row in batch.results:
+                    cost = row.metrics.cost_micros / 1_000_000
+                    records.append({
+                        "campaign_name":  row.campaign.name,
+                        "spend":          cost,
+                        "date":           row.segments.date,
+                        "ad_account_id":  customer_id,
+                    })
+                    count += 1
+            log.info("  Google Ads conta %s: %d registros.", customer_id, count)
+        except Exception as exc:
+            log.warning("  Google Ads conta %s: erro — %s", customer_id, exc)
 
-    for batch in stream:
-        for row in batch.results:
-            cost_brl = row.metrics.cost_micros / 1_000_000
-            seg_date = row.segments.date
-            records.append({
-                "campaign_name": row.campaign.name,
-                "spend":         cost_brl,
-                "date":          seg_date,
-            })
-
-    log.info("Google Ads: %d registros obtidos.", len(records))
+    log.info("Google Ads: %d registros totais.", len(records))
     return records
 
 
@@ -589,43 +597,58 @@ def _parse_timestamp(val: str | None) -> str | None:
         return None
 
 
-def _fetch_hubspot_contacts_window(since_ms: int, until_ms: int) -> list[dict]:
+def _fetch_hubspot_contacts_window(since_ms: int, until_ms: int, max_retries: int = 3) -> list[dict]:
     """
     Busca contacts em uma janela de tempo [since_ms, until_ms).
     A Search API limita a 10.000 resultados por query; janelas menores evitam o limite.
+    Valida count do API vs resultados paginados; re-tenta se faltar algum.
     """
-    url             = f"{HUBSPOT_BASE_URL}/contacts/search"
-    all_contacts: list[dict] = []
-    after: str | None = None
+    url = f"{HUBSPOT_BASE_URL}/contacts/search"
 
-    while True:
-        payload: dict = {
-            "filterGroups": [
-                {
-                    "filters": [
-                        {"propertyName": "createdate", "operator": "GTE", "value": str(since_ms)},
-                        {"propertyName": "createdate", "operator": "LT",  "value": str(until_ms)},
-                    ]
-                }
-            ],
-            "properties": CONTACT_PROPERTIES,
-            "limit":      100,
-        }
-        if after:
-            payload["after"] = after
+    for attempt in range(max_retries):
+        all_contacts: list[dict] = []
+        after: str | None = None
+        expected_total: int | None = None
 
-        resp = requests.post(url, headers=_hub_headers(), json=payload, timeout=300)
-        resp.raise_for_status()
-        data = resp.json()
+        while True:
+            payload: dict = {
+                "filterGroups": [
+                    {
+                        "filters": [
+                            {"propertyName": "createdate", "operator": "GTE", "value": str(since_ms)},
+                            {"propertyName": "createdate", "operator": "LT",  "value": str(until_ms)},
+                        ]
+                    }
+                ],
+                "properties": CONTACT_PROPERTIES,
+                "limit":      100,
+            }
+            if after:
+                payload["after"] = after
 
-        results = data.get("results", [])
-        all_contacts.extend(results)
+            resp = requests.post(url, headers=_hub_headers(), json=payload, timeout=300)
+            resp.raise_for_status()
+            data = resp.json()
 
-        paging = data.get("paging", {})
-        after  = paging.get("next", {}).get("after") if paging else None
-        if not after:
-            break
+            if expected_total is None:
+                expected_total = data.get("total", 0)
 
+            results = data.get("results", [])
+            all_contacts.extend(results)
+
+            paging = data.get("paging", {})
+            after  = paging.get("next", {}).get("after") if paging else None
+            if not after:
+                break
+
+        if expected_total is not None and len(all_contacts) >= expected_total:
+            return all_contacts
+
+        log.warning("  Paginación incompleta: esperados %d, obtenidos %d. Reintento %d/%d.",
+                     expected_total, len(all_contacts), attempt + 1, max_retries)
+
+    log.warning("  Después de %d reintentos, obtenidos %d/%d. Continuando con lo que hay.",
+                 max_retries, len(all_contacts), expected_total)
     return all_contacts
 
 
@@ -811,9 +834,9 @@ def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str 
         log.info("Tabela HubSpot vazia. Carga histórica desde %s.", start_date)
     else:
         start_date = (
-            datetime.strptime(last[:10], "%Y-%m-%d") + timedelta(days=1)
+            datetime.strptime(last[:10], "%Y-%m-%d") - timedelta(days=45)
         ).strftime("%Y-%m-%d")
-        log.info("Último createdate HubSpot: %s. Buscando a partir de %s.", last, start_date)
+        log.info("Último createdate HubSpot: %s. Lookback 14d → buscando a partir de %s.", last, start_date)
 
     dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     window_start = int(dt.timestamp() * 1000)
@@ -836,8 +859,20 @@ def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str 
 
         if batch:
             rows = process_hubspot_records(batch, recording_ts)
-            insert_rows(sb, TABLE_HUB, rows, on_conflict="hs_object_id")
-            total_inserted += len(rows)
+            # Filter out contacts already in Supabase (no unique constraint)
+            new_ids = {r["hs_object_id"] for r in rows}
+            existing = set()
+            id_list = list(new_ids)
+            for j in range(0, len(id_list), 500):
+                chunk = id_list[j:j+500]
+                resp = sb.table(TABLE_HUB).select("hs_object_id").in_("hs_object_id", chunk).execute()
+                existing.update(r["hs_object_id"] for r in resp.data)
+            new_rows = [r for r in rows if r["hs_object_id"] not in existing]
+            if new_rows:
+                insert_rows(sb, TABLE_HUB, new_rows)
+            total_inserted += len(new_rows)
+            if len(new_rows) < len(rows):
+                log.info("  %d ya existían, %d nuevos.", len(rows) - len(new_rows), len(new_rows))
 
         window_start = window_end
 
