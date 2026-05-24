@@ -1,12 +1,12 @@
 # Objetivo
-Código em Python que coleta, de forma automatizada e periódica, informações de três fontes externas - Meta Ads, Google Ads e Hubspot - e as centraliza no Google BigQuery. Da plataforma de mídia paga (Meta Ads e Google Ads), são extraídos os valores de investimento por campanha. Do Hubspot, são extraídos dados de Contatos, Leads e Negócios ao longo do funil de vendas.
+Código em Python que coleta, de forma automatizada e periódica, informações de cinco fontes externas — Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts e HubSpot Deals — e as centraliza no Supabase (PostgreSQL). Das plataformas de mídia paga (Meta Ads, Google Ads e LinkedIn Ads), são extraídos os valores de investimento por campanha. Do HubSpot, são extraídos dados de Contatos e Negócios ao longo do funil de vendas.
 
 ## APIs 
 ### API Meta
 #### Autenticação:
 As credenciais estão discriminadas no arquivo .env nas seguintes variáveis:
 - Token de acesso: `META_ACCESS_TOKEN`
-- ID da Conta de Anúncios: `META_AD_ACCOUNT_ID`
+- IDs das Contas de Anúncios: `META_AD_ACCOUNT_IDS` (separados por vírgula)
 
 #### Endpoints: 
 ##### URL base:
@@ -26,7 +26,7 @@ As credenciais estão discriminadas no arquivo .env nas seguintes variáveis:
 - *spend*: dados do investimento das campanhas de anúncios
 
 #### Funcionamento esperado:
-1. É esperado que a aplicação confirme, na tabela de gastos do Meta no Big Query, se a coluna de datas está vazia.
+1. É esperado que a aplicação confirme, na tabela de gastos do Meta no Supabase, se a coluna de datas está vazia.
 ##### 1.1 Coluna vazia
 Busca todos os gastos de todas as campanhas. Para isso, considera os valores e regras para respeitar as arquiteturas de segurança e limites da API:
 - *data_inicial* = 2023-09-21
@@ -81,7 +81,7 @@ ORDER BY segments.date DESC
 - *metrics.cost_micros*: dados do investimento das campanhas de anúncios, em micros (1 unidade = R$ 0,000001) - convertido para reais dividindo por 1.000.000
 
 #### Funcionamento esperado:
-1. É esperado que a aplicação confirme, na tabela de gastos do Google no Big Query, se a coluna de datas está vazia.
+1. É esperado que a aplicação confirme, na tabela de gastos do Google no Supabase, se a coluna de datas está vazia.
 ##### 1.1 Se Coluna vazia
 Busca todos os gastos de todas as campanhas. Para isso, considera os valores:
 - *data_inicial* = 2021-11-22
@@ -91,124 +91,170 @@ Busca todos os gastos de todas as campanhas. Para isso, considera os valores:
 - *data_inicial* = última data informada na tabela de gastos + 1
 - *data_final* = data atual - 1
 
-### API Hubspot
+### API LinkedIn Ads
+#### Autenticação:
+As credenciais estão discriminadas no arquivo .env nas seguintes variáveis:
+- Token de acesso: `LINKEDIN_ACCESS_TOKEN`
+- IDs das Contas de Anúncios: `LINKEDIN_AD_ACCOUNT_IDS` (separados por vírgula)
+
+#### Método de consulta:
+A aquisição de dados utiliza chamadas diretas à API REST do LinkedIn via `subprocess curl`, com os cabeçalhos `Linkedin-Version` e `X-Restli-Protocol-Version` obrigatórios. A resposta JSON é processada diretamente em Python.
+
+##### Endpoint utilizado:
+- https://api.linkedin.com/rest/adAnalytics
+
+##### Parâmetros:
+- `q=analytics`
+- `pivot=CAMPAIGN`
+- `timeGranularity=DAILY`
+- `accounts=List(urn:li:sponsoredAccount:{account_id})`
+- `dateRange=(start:(...),end:(...))`
+- `fields=dateRange,costInLocalCurrency,pivotValues`
+
+#### Dados Capturados:
+- *dateRange.start*: data de início do investimento
+- *costInLocalCurrency*: valor investido na campanha
+- *pivotValues*: URN da campanha (convertido para nome via endpoint `/adCampaignsV2/{id}`)
+
+#### Funcionamento esperado:
+1. Verifica a última data registrada na tabela do LinkedIn no Supabase.
+2. Se vazia, inicia carga histórica desde 2023-09-01.
+3. A coleta é feita em janelas trimestrais para evitar timeouts.
+4. Inclui proteção contra rate limiting (HTTP 429) com backoff e até 5 tentativas.
+
+### API HubSpot
 #### Autenticação:
 A credencial está discriminada no .env na seguinte variável:
 - Token de acesso: `TOKEN_ACESSO_HUBSPOT`
 
 #### Método de consulta:
-1. Busca de Leads, com paginação automática
-2. Busca em lote dos Contatos associados via Batch API, em lotes de até 100 registros
+Utiliza a HubSpot Search API (v3) com filtros por `createdate` em janelas diárias, para contornar o limite de 10.000 resultados por query. Todas as requisições usam POST com payload JSON.
 
-##### Endpoints:
-URL base:
+##### Endpoint base:
 - https://api.hubapi.com/crm/v3/objects
 
-Dados | Endpoint | Método
--- | -- | --
-Leads | */leads/search* | POST
-Contatos | */contacts/batch/read* | POST
+#### HubSpot Contacts
 
-<!-- depois, inserir uma 2ª versão que busque TODOS os dados para atualização do histórico -->
+##### Endpoint:
+- `/contacts/search` — POST
+
 ##### Filtro de período:
-São buscados todos os leads criados a partir do primeiro dia do mês anterior, utilizando o campo hs_createdate com operador GTE (maior ou igual), em milissegundos (padrão HubSpot).
+Contacts criados a partir da última data registrada no Supabase (com lookback de 45 dias), paginados em janelas de 1 dia.
 
-##### Dados Capturados — Leads:
-- *hs_object_id*: identificador único do lead
-- *hs_createdate*: data de criação do lead
-- *hs_pipeline_stage*: estágio atual no pipeline
-- *status_do_lead*: status do lead
-- *fonte_lead*: fonte de origem do lead
-- *hs_lead_name*: nome do lead
-- *hubspot_owner_id*: responsável pelo lead
-- *hubspot_team_id*: time responsável
-- *hs_lead_disqualification_reason*: motivo de desqualificação
-- *motivo_de_perda__micro_*: motivo de perda
-- *hs_lead_source*: fonte do lead
-- *hs_lead_associated_deal_pipeline_stage*: estágio do negócio associado
-- *hs_lead_associated_deals_count*: quantidade de negócios associados
-- *hs_primary_contact_id*: ID do contato principal associado (usado para busca em lote)
+##### Dados Capturados:
+- *hs_object_id*, *createdate*, *lastmodifieddate*
+- *firstname*, *lastname*, *email*, *phone*, *company*
+- *lifecyclestage*, *hs_lead_status*
+- *hubspot_owner_id*, *num_associated_deals*
+- *hs_analytics_source*, *hs_analytics_last_touch_converting_campaign*
+- *numemployees*, *jobtitle*
+- *not_qualified_reason*, *estado_de_lead*
+- *hs_object_source_detail_1*, *hs_analytics_source_data_1*, *hs_analytics_source_data_2*
+- *stage_of_the_deal*, *motivo_no_interesado*, *conversion_de_lead*
+- *hubspot_team_id*, *form_submitted*, *country*, *region*
+- *has_valid_deal*: booleano calculado — `True` se o contato não possui deals ou possui ao menos um deal fora dos pipelines excluídos (Business Partner, BDRs, Partnerships)
 
-##### Dados Capturados — Contatos *(prefixados com contact_ no resultado final)*:
-- *contact_firstname* / *contact_lastname*: nome e sobrenome
-- *contact_email*: e-mail
-- *contact_lifecyclestage*: estágio no ciclo de vida
-- *contact_numemployees*: número de funcionários da empresa
-- *contact_holding_dropdown*: se a empresa é uma holding ou não 
-- *contact_cargo__fechado_*: cargo do contato
-- *contact_qual_o_erp_utilizado_por_sua_empresa_para_sua_gestao_financeira_*: ERP utilizado pela empresa
+#### HubSpot Deals
 
-## Google Big Query (GBQ)
-### Autenticação:
-As devidas credenciais de acesso estão discriminadas no .env na seguinte variável:
-- Dados da Service Account: `GOOGLE_APPLICATION_CREDENTIALS`
-- ID do Projeto: `BIGQUERY_PROJECT_ID`
+##### Endpoint:
+- `/deals/search` — POST
 
-### Datasets:
-Os IDs de cada Datasets são:
-- *Dataset para as tabelas dos dados exportados do Hubspot*: `mkt-laura-teste-api-meta.HUB_Leads_leadsgeradosecontatos`
-- *Dataset para as tabelas dos dados exportados do Meta*: `mkt-laura-teste-api-meta.META_Ads_gastosporcampanha`
-- *Dataset para as tabelas dos dados exportados do Google*: `mkt-laura-teste-api-meta.GOOGLE_Ads_gastosporcampanha`
+##### Filtro de período:
+Deals criados a partir da última data registrada no Supabase, paginados em janelas de 1 dia.
 
+##### Dados Capturados:
+- *hs_object_id*, *dealname*, *amount*
+- *createdate*, *closedate*, *lastmodifieddate*
+- *dealstage*, *pipeline* (mapeados para nomes legíveis)
+- *hubspot_owner_id*, *ae_deal_won*, *ae_squad*
+- *first_meeting_status*, *deal_source*, *pais*
+- *contact_ids*: lista de IDs de contatos associados ao deal (via Associations Batch API v4)
+
+## Supabase
 ### Tabelas:
-As tabelas que deverão ser preenchidas e suas respectivas colunas são:
-- `teste_01`
-
-Field name | Type | Mode
--- | -- | --
-dt_h_recording_data | TIMESTAMP | REQUIRED
-fonte_lead | STRING | REQUIRED
-hs_createdate | TIMESTAMP | REQUIRED
-hs_lastmodifieddate | TIMESTAMP | NULLABLE
-hs_lead_associated_deal_pipeline_stage | STRING | NULLABLE
-hs_lead_associated_deals_count | INTEGER | NULLABLE
-hs_lead_disqualification_reason | STRING | NULLABLE
-hs_lead_name | STRING | NULLABLE
-hs_lead_source | STRING | REQUIRED
-hs_object_id | STRING | REQUIRED
-hs_object_source_detail_1 | STRING | REQUIRED
-hs_pipeline_stage | STRING | REQUIRED
-hs_primary_contact_id | STRING | NULLABLE
-hs_v2_date_entered_1108384633 | TIMESTAMP | NULLABLE
-hs_v2_date_entered_1292804898 | TIMESTAMP | NULLABLE
-hs_v2_date_entered_1296019059 | TIMESTAMP | NULLABLE
-hs_v2_date_entered_attempting_stage_id_745667965 | TIMESTAMP | NULLABLE
-hs_v2_date_entered_connected_stage_id_2058487257 | TIMESTAMP | NULLABLE
-hs_v2_date_entered_qualified_stage_id_233247981 | TIMESTAMP | NULLABLE
-hs_v2_date_entered_unqualified_stage_id_1675714327 | TIMESTAMP | NULLABLE
-hs_v2_latest_time_in_connected_stage_id_2058487257 | TIMESTAMP | NULLABLE
-hubspot_owner_id | STRING | NULLABLE
-hubspot_team_id | STRING | NULLABLE
-map_fonte_de_trafego_mais_recente_1 | STRING | NULLABLE
-map_fonte_de_trafego_mais_recente_2 | STRING | NULLABLE
-motivo_de_perda__micro_ | STRING | NULLABLE
-produtosdirecionados | STRING | NULLABLE
-status_do_lead | STRING | NULLABLE
-contact_leads_associados | INTEGER | NULLABLE
-contact_firstname | STRING | NULLABLE
-contact_lastname | STRING | NULLABLE
-contact_email | STRING | NULLABLE
-contact_cargo__fechado_ | STRING | NULLABLE
-contact_qual_o_erp_utilizado_por_sua_empresa_para_sua_gestao_financeira_ | STRING | NULLABLE
-contact_numemployees | STRING | NULLABLE
-contact_holding_dropdown | STRING | NULLABLE
-contact_lifecyclestage | STRING | NULLABLE
-contact_eventos__ultimos_100_ | STRING | NULLABLE
 
 - `teste_data_meta_01`
 
-Field name | Type | Mode
--- | -- | --
-date_start | DATE | REQUIRED
-campaign_name | STRING | REQUIRED
-cost | FLOAT | NULLABLE
-dt_h_recording_data | TIMESTAMP | REQUIRED
+Field name | Type
+-- | --
+date_start | DATE
+campaign_name | STRING
+cost | FLOAT
+ad_account_id | STRING
+dt_h_recording_data | TIMESTAMP
 
 - `teste_data_google_01`
 
-Field name | Type | Mode
--- | -- | --
-campaign_name | STRING | REQUIRED
-spend | FLOAT | NULLABLE
-date | DATE | REQUIRED
-dt_h_recording_data | TIMESTAMP | REQUIRED
+Field name | Type
+-- | --
+campaign_name | STRING
+spend | FLOAT
+date | DATE
+ad_account_id | STRING
+dt_h_recording_data | TIMESTAMP
+
+- `teste_data_linkedin_01`
+
+Field name | Type
+-- | --
+date_start | DATE
+campaign_name | STRING
+cost | FLOAT
+ad_account_id | STRING
+dt_h_recording_data | TIMESTAMP
+
+- `teste_01` (HubSpot Contacts)
+
+Field name | Type
+-- | --
+dt_h_recording_data | TIMESTAMP
+hs_object_id | STRING
+createdate | TIMESTAMP
+lastmodifieddate | TIMESTAMP
+firstname | STRING
+lastname | STRING
+email | STRING
+phone | STRING
+company | STRING
+lifecyclestage | STRING
+hs_lead_status | STRING
+hubspot_owner_id | STRING
+num_associated_deals | INTEGER
+hs_analytics_source | STRING
+hs_analytics_last_touch_converting_campaign | STRING
+numemployees | STRING
+jobtitle | STRING
+not_qualified_reason | STRING
+estado_de_lead | STRING
+hs_object_source_detail_1 | STRING
+hs_analytics_source_data_1 | STRING
+hs_analytics_source_data_2 | STRING
+stage_of_the_deal | STRING
+motivo_no_interesado | STRING
+conversion_de_lead | STRING
+hubspot_team_id | STRING
+form_submitted | STRING
+country | STRING
+region | STRING
+has_valid_deal | BOOLEAN
+
+- `teste_data_deals_01`
+
+Field name | Type
+-- | --
+dt_h_recording_data | TIMESTAMP
+hs_object_id | STRING
+dealname | STRING
+amount | FLOAT
+createdate | TIMESTAMP
+closedate | TIMESTAMP
+lastmodifieddate | TIMESTAMP
+dealstage | STRING
+pipeline | STRING
+hubspot_owner_id | STRING
+ae_deal_won | STRING
+ae_squad | STRING
+first_meeting_status | STRING
+deal_source | STRING
+pais | STRING
+contact_ids | ARRAY
