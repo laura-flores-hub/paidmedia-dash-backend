@@ -4,6 +4,7 @@ Coleta dados de Meta Ads, Google Ads e HubSpot e centraliza no Supabase.
 """
 
 import os
+import getpass
 import time
 import json
 import logging
@@ -11,7 +12,6 @@ from datetime import datetime, timedelta, timezone, date
 from dateutil.relativedelta import relativedelta
 
 import requests
-from dotenv import load_dotenv
 from supabase import create_client, Client
 from google.ads.googleads.client import GoogleAdsClient
 from rich.logging import RichHandler
@@ -25,23 +25,42 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
     handlers=[
         RichHandler(rich_tracebacks=True, markup=True),
-        logging.FileHandler("/Users/marcospalacio/Documents/dashboards/dashspy.log", mode="w",encoding="utf-8"),
+        logging.FileHandler("dashspy.log", mode="w", encoding="utf-8")
     ]
 )
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Carrega variáveis de ambiente
+# Credenciais — preenchidas em runtime via prompt seguro
 # ---------------------------------------------------------------------------
-load_dotenv()
+META_ACCESS_TOKEN: str = ""
+META_AD_ACCOUNT_IDS: list[str] = []
+HUBSPOT_TOKEN: str = ""
+LINKEDIN_ACCESS_TOKEN: str = ""
+LINKEDIN_AD_ACCOUNT_IDS: list[str] = []
+SUPABASE_URL: str = ""
+SUPABASE_KEY: str = ""
+GOOGLE_ADS_YAML_PATH: str = ""
 
-META_ACCESS_TOKEN      = os.environ["META_ACCESS_TOKEN"]
-META_AD_ACCOUNT_IDS    = [a.strip() for a in os.environ["META_AD_ACCOUNT_IDS"].split(",")]
-HUBSPOT_TOKEN          = os.environ["TOKEN_ACESSO_HUBSPOT"]
-LINKEDIN_ACCESS_TOKEN  = os.environ["LINKEDIN_ACCESS_TOKEN"]
-LINKEDIN_AD_ACCOUNT_IDS = [a.strip() for a in os.environ["LINKEDIN_AD_ACCOUNT_IDS"].split(",")]
-SUPABASE_URL           = os.environ["SUPABASE_URL"]
-SUPABASE_KEY           = os.environ["SUPABASE_KEY"]
+
+def prompt_credentials() -> None:
+    """Solicita todas as credenciais via terminal seguro (sem eco)."""
+    global META_ACCESS_TOKEN, META_AD_ACCOUNT_IDS
+    global HUBSPOT_TOKEN
+    global LINKEDIN_ACCESS_TOKEN, LINKEDIN_AD_ACCOUNT_IDS
+    global SUPABASE_URL, SUPABASE_KEY
+    global GOOGLE_ADS_YAML_PATH
+
+    print("\n=== Credenciais necessárias ===")
+    META_ACCESS_TOKEN       = getpass.getpass("META_ACCESS_TOKEN: ")
+    META_AD_ACCOUNT_IDS     = [a.strip() for a in input("META_AD_ACCOUNT_IDS (vírgula): ").split(",")]
+    HUBSPOT_TOKEN           = getpass.getpass("TOKEN_ACESSO_HUBSPOT: ")
+    LINKEDIN_ACCESS_TOKEN   = getpass.getpass("LINKEDIN_ACCESS_TOKEN: ")
+    LINKEDIN_AD_ACCOUNT_IDS = [a.strip() for a in input("LINKEDIN_AD_ACCOUNT_IDS (vírgula): ").split(",")]
+    SUPABASE_URL            = input("SUPABASE_URL: ")
+    SUPABASE_KEY            = getpass.getpass("SUPABASE_KEY: ")
+    GOOGLE_ADS_YAML_PATH    = input("GOOGLE_ADS_YAML_PATH: ")
+    print("===============================\n")
 
 # ---------------------------------------------------------------------------
 # Constantes de Supabase (nomes das tabelas)
@@ -118,7 +137,12 @@ def insert_rows(sb: Client, table: str, rows: list[dict], batch_size: int = 500,
 def save_temp(platform: str, rows: list[dict], recording_ts: str) -> str:
     """Salva os registros em um arquivo JSON temporário e retorna o caminho."""
     ts = recording_ts.replace(":", "-").replace(" ", "_")
-    path = f"/Users/marcospalacio/Documents/dashboards/{platform}_{ts}.json"
+    from pathlib import Path
+
+    OUTPUT_DIR = Path("outputs")
+    OUTPUT_DIR.mkdir(exist_ok=True)
+
+    path = OUTPUT_DIR / f"{platform}_{ts}.json"
     with open(path, "w", encoding="utf-8") as f:
         json.dump(rows, f, ensure_ascii=False, indent=2, default=str)
     log.info("Dados salvos em: %s (%d linhas)", path, len(rows))
@@ -296,7 +320,8 @@ def fetch_google_ads(data_inicial: str, data_final: str) -> list[dict]:
     """
     log.info("Google Ads: buscando de %s até %s.", data_inicial, data_final)
 
-    client     = GoogleAdsClient.load_from_storage("google-ads.yaml")
+    GOOGLE_ADS_YAML_PATH = input("GOOGLE_ADS_YAML_PATH: ").strip()
+    client = GoogleAdsClient.load_from_storage(GOOGLE_ADS_YAML_PATH)
     ga_service = client.get_service("GoogleAdsService")
 
     query = f"""
@@ -554,9 +579,7 @@ CONTACT_PROPERTIES = [
     "hs_analytics_source",
     "hs_analytics_last_touch_converting_campaign",
     "numemployees",
-    "holding_dropdown",
     "jobtitle",
-    "qual_o_erp_utilizado_por_sua_empresa_para_sua_gestao_financeira",
     "not_qualified_reason",
     "estado_de_lead",
     "hs_object_source_detail_1",
@@ -798,10 +821,7 @@ def process_hubspot_records(contacts: list[dict], recording_ts: str) -> list[dic
             "hs_analytics_source":                          props.get("hs_analytics_source"),
             "hs_analytics_last_touch_converting_campaign":  props.get("hs_analytics_last_touch_converting_campaign"),
             "numemployees":        props.get("numemployees"),
-            "holding_dropdown":    props.get("holding_dropdown"),
             "jobtitle":            props.get("jobtitle"),
-            "qual_o_erp_utilizado_por_sua_empresa_para_sua_gestao_financeira":
-                props.get("qual_o_erp_utilizado_por_sua_empresa_para_sua_gestao_financeira"),
             "not_qualified_reason":       props.get("not_qualified_reason"),
             "estado_de_lead":             props.get("estado_de_lead"),
             "hs_object_source_detail_1":   props.get("hs_object_source_detail_1"),
@@ -822,10 +842,7 @@ def process_hubspot_records(contacts: list[dict], recording_ts: str) -> list[dic
 
 
 def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | None]:
-    """
-    Coleta e insere HubSpot Contacts janela por janela (streaming).
-    Insere cada janela imediatamente para não perder progresso em caso de timeout.
-    """
+    """Coleta HubSpot Contacts janela por janela e retorna todos para confirmação antes do envio."""
     log.info("=== Coletando HubSpot Contacts ===")
     last = get_last_date(sb, TABLE_HUB, "createdate")
 
@@ -836,7 +853,7 @@ def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str 
         start_date = (
             datetime.strptime(last[:10], "%Y-%m-%d") - timedelta(days=45)
         ).strftime("%Y-%m-%d")
-        log.info("Último createdate HubSpot: %s. Lookback 14d → buscando a partir de %s.", last, start_date)
+        log.info("Último createdate HubSpot: %s. Lookback 45d → buscando a partir de %s.", last, start_date)
 
     dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     window_start = int(dt.timestamp() * 1000)
@@ -846,39 +863,25 @@ def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str 
         log.info("HubSpot já está atualizado. Nada a coletar.")
         return [], None
 
-    total_inserted = 0
+    all_contacts: list[dict] = []
     while window_start < now_ms:
         window_end = min(window_start + 1 * 24 * 3600 * 1000, now_ms)
         try:
             batch = _fetch_hubspot_contacts_window(window_start, window_end)
         except Exception as exc:
-            log.error("Timeout/erro na janela %s→%s: %s. Salvando progresso e encerrando.", window_start, window_end, exc)
+            log.error("Timeout/erro na janela %s→%s: %s. Encerrando coleta.", window_start, window_end, exc)
             break
-
         log.info("  Janela %s→%s: %d contacts.", window_start, window_end, len(batch))
-
-        if batch:
-            rows = process_hubspot_records(batch, recording_ts)
-            # Filter out contacts already in Supabase (no unique constraint)
-            new_ids = {r["hs_object_id"] for r in rows}
-            existing = set()
-            id_list = list(new_ids)
-            for j in range(0, len(id_list), 500):
-                chunk = id_list[j:j+500]
-                resp = sb.table(TABLE_HUB).select("hs_object_id").in_("hs_object_id", chunk).execute()
-                existing.update(r["hs_object_id"] for r in resp.data)
-            new_rows = [r for r in rows if r["hs_object_id"] not in existing]
-            if new_rows:
-                insert_rows(sb, TABLE_HUB, new_rows)
-            total_inserted += len(new_rows)
-            if len(new_rows) < len(rows):
-                log.info("  %d ya existían, %d nuevos.", len(rows) - len(new_rows), len(new_rows))
-
+        all_contacts.extend(batch)
         window_start = window_end
 
-    log.info("HubSpot: %d contacts inseridos no total.", total_inserted)
-    # Retorna lista vazia para não pedir confirmação (já foi inserido em streaming)
-    return [], None
+    if not all_contacts:
+        return [], None
+
+    rows = process_hubspot_records(all_contacts, recording_ts)
+    path = save_temp("hubspot", rows, recording_ts)
+    log.info("HubSpot: %d contacts coletados.", len(rows))
+    return rows, path
 
 
 def send_hubspot(sb: Client, rows: list[dict]) -> None:
@@ -959,6 +962,7 @@ DEAL_PROPERTIES = [
     "ae_deal_won",
     "ae_squad",
     "first_meeting_status",
+    "pais",
 ]
 
 
@@ -995,6 +999,7 @@ def _fetch_hubspot_deals_window(since_ms: int, until_ms: int) -> list[dict]:
                 "filters": [
                     {"propertyName": "createdate", "operator": "GTE", "value": str(since_ms)},
                     {"propertyName": "createdate", "operator": "LT",  "value": str(until_ms)},
+                    {"propertyName": "pais",       "operator": "EQ",  "value": "Brasil"},
                 ]
             }],
             "properties": DEAL_PROPERTIES,
@@ -1042,13 +1047,14 @@ def process_deal_records(deals: list[dict], recording_ts: str) -> list[dict]:
             "ae_squad":            props.get("ae_squad"),
             "first_meeting_status": props.get("first_meeting_status"),
             "deal_source":         props.get("origen_del_contacto__from_where_we_got_the_call_"),
+            "pais":                props.get("pais"),
             "contact_ids":         deal_contacts.get(did, []),
         })
     return rows
 
 
 def run_deals_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | None]:
-    """Coleta e insere HubSpot Deals janela por janela (streaming)."""
+    """Coleta HubSpot Deals janela por janela e retorna todos para confirmação antes do envio."""
     log.info("=== Coletando HubSpot Deals ===")
     last = get_last_date(sb, TABLE_DEALS, "createdate")
 
@@ -1069,26 +1075,25 @@ def run_deals_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | 
         log.info("Deals já está atualizado. Nada a coletar.")
         return [], None
 
-    total_inserted = 0
+    all_deals: list[dict] = []
     while window_start < now_ms:
         window_end = min(window_start + 1 * 24 * 3600 * 1000, now_ms)
         try:
             batch = _fetch_hubspot_deals_window(window_start, window_end)
         except Exception as exc:
-            log.error("Timeout/erro na janela %s→%s: %s.", window_start, window_end, exc)
+            log.error("Timeout/erro na janela %s→%s: %s. Encerrando coleta.", window_start, window_end, exc)
             break
-
         log.info("  Janela %s→%s: %d deals.", window_start, window_end, len(batch))
-
-        if batch:
-            rows = process_deal_records(batch, recording_ts)
-            insert_rows(sb, TABLE_DEALS, rows, on_conflict="hs_object_id")
-            total_inserted += len(rows)
-
+        all_deals.extend(batch)
         window_start = window_end
 
-    log.info("HubSpot Deals: %d deals inseridos no total.", total_inserted)
-    return [], None
+    if not all_deals:
+        return [], None
+
+    rows = process_deal_records(all_deals, recording_ts)
+    path = save_temp("deals", rows, recording_ts)
+    log.info("HubSpot Deals: %d deals coletados.", len(rows))
+    return rows, path
 
 
 def send_deals(sb: Client, rows: list[dict]) -> None:
@@ -1101,6 +1106,7 @@ def send_deals(sb: Client, rows: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    prompt_credentials()
     recording_ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S UTC")
     log.info("Iniciando dashspy_v1 — registro em: %s", recording_ts)
 

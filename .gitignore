@@ -3,6 +3,10 @@
 client_secret.json
 google-ads.yaml
 generate_user_credentials.py
+.env.*
+!.env.example
+*.log
+!google-ads.example.yaml
 
 # Chave de serviço do Google (BigQuery)
 service_account.json
