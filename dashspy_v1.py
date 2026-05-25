@@ -1245,7 +1245,7 @@ def retry_from_outputs() -> None:
     else:
         log.info("retry_from_outputs finalizado com sucesso.")
 
-
+# entry points for errors in supabases phase
 if __name__ == "__main__":
     import sys
     if "--retry" in sys.argv:
