@@ -1,6 +1,39 @@
 # Objective
 Python code that automatically and periodically collects information from five external sources — Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts, and HubSpot Deals — and centralizes it in Supabase (PostgreSQL). From the paid media platforms (Meta Ads, Google Ads, and LinkedIn Ads), the investment values per campaign are extracted. From HubSpot, data on Contacts and Deals throughout the sales funnel is extracted.
 
+## Dashboards
+
+- `dashboard.html` — main interactive dashboard for visualizing the collected data.
+- `charts-demo.html` — sandbox for exploring chart types using real pipeline data.
+
+## Pipeline Flow and Failure Handling
+
+### Phase 1 — Collection
+
+Each data source is collected independently. A failure in any platform is logged but does not interrupt the remaining collections. At the end of the phase, all collected records are saved as JSON files in the `outputs/` directory (`outputs/<platform>_<timestamp>.json`), ensuring no data is lost before the send step.
+
+### Phase 2 — Confirmation and send
+
+For each platform with new data, the script displays the path to the temporary file and requests explicit confirmation before sending to Supabase. Sending can be cancelled per platform without affecting the others.
+
+### Send failure handling
+
+If a send fails after confirmation, the platform is recorded in a failure list. At the end of the round, the script asks whether the user wants to retry the failed sends — this cycle repeats until all sends succeed or the user manually exits.
+
+If the process is interrupted after collection but before sending, the files in `outputs/` remain available for resending via `--retry`, without needing to re-collect from the APIs.
+
+#### How to run
+
+```bash
+python dashspy_v1.py
+```
+Runs the full pipeline: collects data from Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts, and HubSpot Deals, saves the results locally for review, and waits for confirmation before sending to Supabase.
+
+```bash
+python dashspy_v1.py --retry
+```
+Reloads JSON files previously saved in `outputs/` and resends them to Supabase without re-collecting from the APIs. Useful for recovering sends that failed after a successful collection run.
+
 ## APIs
 ### Meta API
 #### Authentication:

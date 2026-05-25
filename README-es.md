@@ -1,6 +1,39 @@
 # Objetivo
 Código en Python que recolecta, de forma automatizada y periódica, información de cinco fuentes externas — Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts y HubSpot Deals — y la centraliza en Supabase (PostgreSQL). De las plataformas de medios pagos (Meta Ads, Google Ads y LinkedIn Ads) se extraen los valores de inversión por campaña. De HubSpot se extraen datos de Contactos y Negocios a lo largo del embudo de ventas.
 
+## Dashboards
+
+- `dashboard.html` — dashboard interactivo principal de visualización de los datos recolectados.
+- `charts-demo.html` — sandbox de exploración de tipos de gráfico con datos reales del pipeline.
+
+## Flujo del Pipeline y Manejo de Fallos
+
+### Fase 1 — Recolección
+
+Cada fuente de datos se recolecta de forma independiente. Un fallo en cualquier plataforma queda registrado en el log pero no interrumpe las demás recolecciones. Al final de la fase, todos los registros recolectados se guardan como archivos JSON en el directorio `outputs/` (`outputs/<plataforma>_<timestamp>.json`), garantizando que ningún dato se pierda antes del envío.
+
+### Fase 2 — Confirmación y envío
+
+Para cada plataforma con datos nuevos, el script muestra la ruta del archivo temporal y solicita confirmación explícita antes de enviar a Supabase. El envío puede cancelarse por plataforma sin afectar a las demás.
+
+### Manejo de fallos en el envío
+
+Si un envío falla tras la confirmación, la plataforma queda registrada en una lista de fallos. Al final de la ronda, el script pregunta si el usuario desea reintentar los envíos fallidos — este ciclo se repite hasta que todos sean exitosos o el usuario finalice manualmente.
+
+Si el proceso se interrumpe después de la recolección pero antes del envío, los archivos en `outputs/` quedan disponibles para reenvío mediante `--retry`, sin necesidad de volver a recolectar desde las APIs.
+
+#### Cómo ejecutar
+
+```bash
+python dashspy_v1.py
+```
+Ejecuta el pipeline completo: recolecta datos de Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts y HubSpot Deals, guarda los resultados localmente para revisión y espera confirmación antes de enviarlos a Supabase.
+
+```bash
+python dashspy_v1.py --retry
+```
+Recarga archivos JSON guardados previamente en `outputs/` y los reenvía a Supabase sin volver a recolectar desde las APIs. Útil para recuperar envíos que fallaron tras una recolección exitosa.
+
 ## APIs
 ### API Meta
 #### Autenticación:

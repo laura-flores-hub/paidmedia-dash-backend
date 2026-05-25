@@ -1,6 +1,39 @@
 # Objetivo
 Código em Python que coleta, de forma automatizada e periódica, informações de cinco fontes externas — Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts e HubSpot Deals — e as centraliza no Supabase (PostgreSQL). Das plataformas de mídia paga (Meta Ads, Google Ads e LinkedIn Ads), são extraídos os valores de investimento por campanha. Do HubSpot, são extraídos dados de Contatos e Negócios ao longo do funil de vendas.
 
+## Dashboards
+
+- `dashboard.html` — dashboard interativo principal de visualização dos dados coletados.
+- `charts-demo.html` — sandbox de exploração de tipos de gráfico com dados reais do pipeline.
+
+## Fluxo do pipeline e tratamento de falhas
+
+### Fase 1 — Coleta
+
+Cada fonte de dados é coletada de forma independente. Uma falha em qualquer plataforma é registrada em log mas não interrompe as demais coletas. Ao final da fase, todos os registros coletados são salvos como arquivos JSON no diretório `outputs/` (`outputs/<plataforma>_<timestamp>.json`), garantindo que nenhum dado seja perdido antes do envio.
+
+### Fase 2 — Confirmação e envio
+
+Para cada plataforma com dados novos, o script exibe o caminho do arquivo temporário e solicita confirmação explícita antes de enviar ao Supabase. O envio pode ser cancelado por plataforma sem afetar as demais.
+
+### Tratamento de falhas de envio
+
+Se um envio falhar após a confirmação, a plataforma é registrada numa lista de falhas. Ao final da rodada, o script pergunta se o usuário deseja tentar novamente os envios com falha — esse ciclo se repete até que todos sejam bem-sucedidos ou o usuário encerre manualmente.
+
+Caso o processo seja interrompido após a coleta mas antes do envio, os arquivos em `outputs/` ficam disponíveis para reenvio via `--retry`, sem necessidade de re-coletar nas APIs.
+
+#### Como executar
+
+```bash
+python dashspy_v1.py
+```
+Executa o pipeline completo: coleta dados de Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts e HubSpot Deals, salva os resultados localmente para revisão e aguarda confirmação antes de enviar ao Supabase.
+
+```bash
+python dashspy_v1.py --retry
+```
+Recarrega arquivos JSON salvos anteriormente em `outputs/` e reenvia ao Supabase sem re-coletar nas APIs. Útil para recuperar envios que falharam após uma coleta bem-sucedida.
+
 ## APIs 
 ### API Meta
 #### Autenticação:
