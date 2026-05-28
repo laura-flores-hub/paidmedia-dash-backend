@@ -1,4 +1,4 @@
-# Credenciais e variáveis de ambiente
+# Credentials and env variables
 .env
 client_secret.json
 google-ads.yaml
@@ -8,7 +8,7 @@ generate_user_credentials.py
 *.log
 !google-ads.example.yaml
 
-# Chave de serviço do Google (BigQuery)
+# Google's service key
 service_account.json
 
 # Python
@@ -22,7 +22,7 @@ dist/
 build/
 .eggs/
 
-# Ambientes virtuais
+# venvs
 .venv/
 venv/
 env/
@@ -34,19 +34,21 @@ ENV/
 *.sublime-project
 *.sublime-workspace
 
-# Sistema operacional
+# OS
 .DS_Store
 Thumbs.db
 
-# Testes e Temporários
+# Tests and temp files
 testes_anteriores
 jsons
 versoes-anteriores.md
 temp
-# Raw data exports (large files)
+/outputs
+## Raw data exports (large files)
 *.json
 dashspy.log
+*.csv
 
 # Analysis outputs
-inbound_report.html
-.vercel
+##inbound_report.html
+##.vercel
