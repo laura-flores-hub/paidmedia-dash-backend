@@ -46,6 +46,7 @@ temp
 /outputs
 ## Raw data exports (large files)
 *.json
+!frontend/**/*.json
 dashspy.log
 *.csv
 
