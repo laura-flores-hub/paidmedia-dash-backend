@@ -1,33 +1,6 @@
 # Objective
 Python code that automatically and periodically collects information from five external sources — Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts, and HubSpot Deals — and centralizes it in Supabase (PostgreSQL). From the paid media platforms (Meta Ads, Google Ads, and LinkedIn Ads), the investment values per campaign are extracted. From HubSpot, data on Contacts and Deals throughout the sales funnel is extracted.
 
-## Dashboards
-
-### Primary frontend — Next.js (`frontend/management-dashboard-view 2/`)
-
-Interface built with Next.js 16, React 19, TypeScript, Tailwind CSS, shadcn/ui, and Recharts.
-
-#### Run locally
-
-```bash
-cd "frontend/management-dashboard-view 2"
-pnpm install
-pnpm dev
-```
-
-Open `http://localhost:3000`.
-
-#### Deploy on Vercel
-
-- **Framework Preset:** Next.js
-- **Root Directory:** `frontend/management-dashboard-view 2`
-- **Package Manager:** pnpm
-
-### Static dashboards (legacy)
-
-- `frontend/dashboard.html` — main interactive dashboard for visualizing the collected data.
-- `frontend/charts-demo.html` — sandbox for exploring chart types using real pipeline data.
-
 ## Pipeline Flow and Failure Handling
 
 ### Phase 1 — Collection
