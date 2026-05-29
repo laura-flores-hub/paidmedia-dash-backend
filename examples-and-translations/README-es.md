@@ -102,7 +102,7 @@ Respeta el límite estricto de 50 solicitudes por lote.
 
 ### API Google
 #### Autenticación:
-Las credenciales están especificadas en el archivo `google-ads.yaml` en las siguientes variables:
+Las credenciales están especificadas en el archivo `google-ads.yaml` (la ruta puede configurarse mediante la variable de entorno `GOOGLE_ADS_YAML_PATH`; valor por defecto: `google-ads.yaml`) en las siguientes variables:
 - Developer Token: `developer_token`
 - Client ID: `client_id`
 - Client Secret: `client_secret`
@@ -206,7 +206,7 @@ Contactos creados a partir de la última fecha registrada en Supabase (con lookb
 - *not_qualified_reason*, *estado_de_lead*
 - *hs_object_source_detail_1*, *hs_analytics_source_data_1*, *hs_analytics_source_data_2*
 - *stage_of_the_deal*, *motivo_no_interesado*, *conversion_de_lead*
-- *hubspot_team_id*, *form_submitted*, *country*, *region*
+- *hubspot_team_id*, *form_submitted*, *country*, *region*, *main_country*
 - *has_valid_deal*: booleano calculado — `True` si el contacto no tiene negocios o tiene al menos uno fuera de los pipelines excluidos (Business Partner, BDRs, Partnerships)
 
 #### HubSpot Deals
@@ -291,6 +291,7 @@ hubspot_team_id | STRING
 form_submitted | STRING
 country | STRING
 region | STRING
+main_country | STRING
 has_valid_deal | BOOLEAN
 
 - `teste_data_deals_01`

@@ -4,7 +4,6 @@ Coleta dados de Meta Ads, Google Ads e HubSpot e centraliza no Supabase.
 """
 
 import os
-import getpass
 import time
 import json
 import logging
@@ -12,6 +11,7 @@ from datetime import datetime, timedelta, timezone, date
 from dateutil.relativedelta import relativedelta
 
 import requests
+from dotenv import load_dotenv
 from supabase import create_client, Client
 from google.ads.googleads.client import GoogleAdsClient
 from rich.logging import RichHandler
@@ -25,42 +25,24 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
     handlers=[
         RichHandler(rich_tracebacks=True, markup=True),
-        logging.FileHandler("dashspy.log", mode="w", encoding="utf-8")
+        logging.FileHandler("dashspy.log", mode="w", encoding="utf-8"),
     ]
 )
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Credenciais — preenchidas em runtime via prompt seguro
+# Carrega variáveis de ambiente
 # ---------------------------------------------------------------------------
-META_ACCESS_TOKEN: str = ""
-META_AD_ACCOUNT_IDS: list[str] = []
-HUBSPOT_TOKEN: str = ""
-LINKEDIN_ACCESS_TOKEN: str = ""
-LINKEDIN_AD_ACCOUNT_IDS: list[str] = []
-SUPABASE_URL: str = ""
-SUPABASE_KEY: str = ""
-GOOGLE_ADS_YAML_PATH: str = ""
+load_dotenv()
 
-
-def prompt_credentials() -> None:
-    """Solicita todas as credenciais via terminal seguro (sem eco)."""
-    global META_ACCESS_TOKEN, META_AD_ACCOUNT_IDS
-    global HUBSPOT_TOKEN
-    global LINKEDIN_ACCESS_TOKEN, LINKEDIN_AD_ACCOUNT_IDS
-    global SUPABASE_URL, SUPABASE_KEY
-    global GOOGLE_ADS_YAML_PATH
-
-    print("\n=== Credenciais necessárias ===")
-    META_ACCESS_TOKEN       = getpass.getpass("META_ACCESS_TOKEN: ")
-    META_AD_ACCOUNT_IDS     = [a.strip() for a in input("META_AD_ACCOUNT_IDS (vírgula): ").split(",")]
-    HUBSPOT_TOKEN           = getpass.getpass("TOKEN_ACESSO_HUBSPOT: ")
-    LINKEDIN_ACCESS_TOKEN   = getpass.getpass("LINKEDIN_ACCESS_TOKEN: ")
-    LINKEDIN_AD_ACCOUNT_IDS = [a.strip() for a in input("LINKEDIN_AD_ACCOUNT_IDS (vírgula): ").split(",")]
-    SUPABASE_URL            = input("SUPABASE_URL: ")
-    SUPABASE_KEY            = getpass.getpass("SUPABASE_KEY: ")
-    GOOGLE_ADS_YAML_PATH    = input("GOOGLE_ADS_YAML_PATH: ")
-    print("===============================\n")
+META_ACCESS_TOKEN       = os.environ["META_ACCESS_TOKEN"]
+META_AD_ACCOUNT_IDS     = [a.strip() for a in os.environ["META_AD_ACCOUNT_IDS"].split(",")]
+HUBSPOT_TOKEN           = os.environ["TOKEN_ACESSO_HUBSPOT"]
+LINKEDIN_ACCESS_TOKEN   = os.environ["LINKEDIN_ACCESS_TOKEN"]
+LINKEDIN_AD_ACCOUNT_IDS = [a.strip() for a in os.environ["LINKEDIN_AD_ACCOUNT_IDS"].split(",")]
+SUPABASE_URL            = os.environ["SUPABASE_URL"]
+SUPABASE_KEY            = os.environ["SUPABASE_KEY"]
+GOOGLE_ADS_YAML_PATH    = os.environ.get("GOOGLE_ADS_YAML_PATH", "google-ads.yaml")
 
 # ---------------------------------------------------------------------------
 # Constantes de Supabase (nomes das tabelas)
@@ -146,7 +128,7 @@ def save_temp(platform: str, rows: list[dict], recording_ts: str) -> str:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(rows, f, ensure_ascii=False, indent=2, default=str)
     log.info("Dados salvos em: %s (%d linhas)", path, len(rows))
-    return path
+    return str(path)
 
 
 def aguardar_confirmacao(nome: str, path: str) -> bool:
@@ -320,7 +302,7 @@ def fetch_google_ads(data_inicial: str, data_final: str) -> list[dict]:
     """
     log.info("Google Ads: buscando de %s até %s.", data_inicial, data_final)
 
-    client = GoogleAdsClient.load_from_storage(GOOGLE_ADS_YAML_PATH)
+    client     = GoogleAdsClient.load_from_storage(GOOGLE_ADS_YAML_PATH)
     ga_service = client.get_service("GoogleAdsService")
 
     query = f"""
@@ -638,9 +620,8 @@ def _fetch_hubspot_contacts_window(since_ms: int, until_ms: int, max_retries: in
                 "filterGroups": [
                     {
                         "filters": [
-                            {"propertyName": "createdate",   "operator": "GTE", "value": str(since_ms)},
-                            {"propertyName": "createdate",   "operator": "LT",  "value": str(until_ms)},
-                            {"propertyName": "main_country", "operator": "EQ",  "value": "Brasil"},
+                            {"propertyName": "createdate", "operator": "GTE", "value": str(since_ms)},
+                            {"propertyName": "createdate", "operator": "LT",  "value": str(until_ms)},
                         ]
                     }
                 ],
@@ -786,7 +767,6 @@ def _fetch_valid_deal_flags(contact_ids: list[str]) -> dict[str, bool]:
 
 def process_hubspot_records(contacts: list[dict], recording_ts: str) -> list[dict]:
     """Converte contacts do HubSpot para o schema da tabela teste_01."""
-    # Para todos los contacts, determina si tienen un deal válido
     contact_ids = [
         str(c.get("properties", {}).get("hs_object_id") or c.get("id", ""))
         for c in contacts
@@ -1001,7 +981,6 @@ def _fetch_hubspot_deals_window(since_ms: int, until_ms: int) -> list[dict]:
                 "filters": [
                     {"propertyName": "createdate", "operator": "GTE", "value": str(since_ms)},
                     {"propertyName": "createdate", "operator": "LT",  "value": str(until_ms)},
-                    {"propertyName": "pais",       "operator": "EQ",  "value": "Brasil"},
                 ]
             }],
             "properties": DEAL_PROPERTIES,
@@ -1108,21 +1087,20 @@ def send_deals(sb: Client, rows: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    prompt_credentials()
     recording_ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S UTC")
     log.info("Iniciando dashspy_v1 — registro em: %s", recording_ts)
 
     sb = get_supabase_client()
 
     pipelines = [
-        ("meta",     "Meta Ads",     run_meta_collect,     send_meta),
-        ("google",   "Google Ads",   run_google_collect,   send_google),
-        ("linkedin", "LinkedIn Ads", run_linkedin_collect, send_linkedin),
-        ("hubspot",  "HubSpot",      run_hubspot_collect,  send_hubspot),
-        ("deals",    "HubSpot Deals", run_deals_collect,   send_deals),
+        ("meta",     "Meta Ads",      run_meta_collect,     send_meta),
+        ("google",   "Google Ads",    run_google_collect,   send_google),
+        ("linkedin", "LinkedIn Ads",  run_linkedin_collect, send_linkedin),
+        ("hubspot",  "HubSpot",       run_hubspot_collect,  send_hubspot),
+        ("deals",    "HubSpot Deals", run_deals_collect,    send_deals),
     ]
 
-    # --- Fase 1: coleta das 3 plataformas ---
+    # --- Fase 1: coleta das plataformas ---
     coletados = {}
     log.info("--- Fase 1: coletando dados de todas as plataformas ---")
     for key, nome, fn_collect, fn_send in pipelines:
@@ -1211,9 +1189,6 @@ def retry_from_outputs() -> None:
         log.warning("Nenhum arquivo selecionado. Encerrando.")
         return
 
-    global SUPABASE_URL, SUPABASE_KEY
-    SUPABASE_URL = input("SUPABASE_URL: ")
-    SUPABASE_KEY = getpass.getpass("SUPABASE_KEY: ")
     sb = get_supabase_client()
 
     falhas: list[str] = []
@@ -1244,7 +1219,7 @@ def retry_from_outputs() -> None:
     else:
         log.info("retry_from_outputs finalizado com sucesso.")
 
-# entry points for errors in supabases phase
+
 if __name__ == "__main__":
     import sys
     if "--retry" in sys.argv:
