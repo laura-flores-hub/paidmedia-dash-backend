@@ -1,154 +1,56 @@
-// Mock data for the dashboard
-export const leadData = {
-  total: 2847,
-  thisMonth: 423,
-  qualified: 312,
-  conversionRate: 11.0,
-  avgLeadScore: 72,
-  weeklyTrend: [
-    { week: "W1", leads: 89, qualified: 64 },
-    { week: "W2", leads: 112, qualified: 78 },
-    { week: "W3", leads: 98, qualified: 71 },
-    { week: "W4", leads: 124, qualified: 99 },
-  ],
-  sourceBreakdown: [
-    { source: "Organic Search", leads: 156, percentage: 37 },
-    { source: "Direct", leads: 98, percentage: 23 },
-    { source: "Referral", leads: 72, percentage: 17 },
-    { source: "Social", leads: 54, percentage: 13 },
-    { source: "Email", leads: 43, percentage: 10 },
-  ],
-  qualityDistribution: [
-    { score: "90-100", count: 45, label: "Hot" },
-    { score: "70-89", count: 112, label: "Warm" },
-    { score: "50-69", count: 98, label: "Neutral" },
-    { score: "30-49", count: 87, label: "Cool" },
-    { score: "0-29", count: 81, label: "Cold" },
-  ],
-};
+// --- Types ---
 
-export const campaignData = {
-  totalSpend: 48250,
-  totalRevenue: 156420,
-  roas: 3.24,
-  cpl: 34.20,
-  impressions: 2450000,
-  clicks: 38500,
-  ctr: 1.57,
-  campaigns: [
-    {
-      name: "Brand Awareness Q2",
-      platform: "Google Ads",
-      spend: 12500,
-      leads: 145,
-      cpl: 86.21,
-      conversions: 18,
-      revenue: 42300,
-      roas: 3.38,
-      status: "active",
-    },
-    {
-      name: "Product Launch",
-      platform: "Meta Ads",
-      spend: 18200,
-      leads: 289,
-      cpl: 62.98,
-      conversions: 34,
-      revenue: 67800,
-      roas: 3.73,
-      status: "active",
-    },
-    {
-      name: "Retargeting",
-      platform: "Google Ads",
-      spend: 8400,
-      leads: 178,
-      cpl: 47.19,
-      conversions: 24,
-      revenue: 31200,
-      roas: 3.71,
-      status: "active",
-    },
-    {
-      name: "LinkedIn B2B",
-      platform: "LinkedIn",
-      spend: 9150,
-      leads: 98,
-      cpl: 93.37,
-      conversions: 12,
-      revenue: 15120,
-      roas: 1.65,
-      status: "paused",
-    },
-  ],
-  dailyPerformance: [
-    { date: "Mon", spend: 6892, leads: 98, revenue: 22340 },
-    { date: "Tue", spend: 7234, leads: 112, revenue: 24560 },
-    { date: "Wed", spend: 6548, leads: 89, revenue: 19870 },
-    { date: "Thu", spend: 7890, leads: 134, revenue: 28900 },
-    { date: "Fri", spend: 8124, leads: 142, revenue: 31200 },
-    { date: "Sat", spend: 5890, leads: 67, revenue: 14780 },
-    { date: "Sun", spend: 5672, leads: 58, revenue: 14770 },
-  ],
-};
+export type Campaign = {
+  name: string
+  platform: string
+  spend: number
+  leads: number
+  cpl: number
+  conversions: number
+  revenue: number
+  roas: number
+  status: string
+}
 
-export const recentLeads = [
-  {
-    id: 1,
-    name: "Sarah Mitchell",
-    company: "TechCorp Inc",
-    email: "s.mitchell@techcorp.com",
-    source: "Google Ads",
-    score: 92,
-    status: "qualified",
-    value: "$12,500",
-    date: "2 hours ago",
-  },
-  {
-    id: 2,
-    name: "James Wilson",
-    company: "Innovate Labs",
-    email: "jwilson@innovatelabs.io",
-    source: "Organic",
-    score: 78,
-    status: "contacted",
-    value: "$8,200",
-    date: "4 hours ago",
-  },
-  {
-    id: 3,
-    name: "Emma Thompson",
-    company: "Growth Partners",
-    email: "emma.t@growthpartners.com",
-    source: "Meta Ads",
-    score: 85,
-    status: "new",
-    value: "$15,000",
-    date: "5 hours ago",
-  },
-  {
-    id: 4,
-    name: "Michael Chen",
-    company: "DataFlow Systems",
-    email: "mchen@dataflow.co",
-    source: "LinkedIn",
-    score: 64,
-    status: "new",
-    value: "$6,800",
-    date: "6 hours ago",
-  },
-  {
-    id: 5,
-    name: "Lisa Park",
-    company: "CloudScale",
-    email: "lpark@cloudscale.com",
-    source: "Referral",
-    score: 88,
-    status: "qualified",
-    value: "$22,000",
-    date: "8 hours ago",
-  },
-];
+export type WeeklyPoint = { week: string; leads: number; qualified: number }
+export type SourcePoint = { source: string; leads: number; percentage: number }
+export type DailyPoint = { date: string; spend: number; leads: number; revenue: number }
+
+export type LeadData = {
+  total: number
+  thisMonth: number
+  qualified: number
+  conversionRate: number
+  weeklyTrend: WeeklyPoint[]
+  sourceBreakdown: SourcePoint[]
+}
+
+export type CampaignData = {
+  totalSpend: number
+  totalRevenue: number
+  roas: number
+  cpl: number
+  campaigns: Campaign[]
+  dailyPerformance: DailyPoint[]
+}
+
+export type Lead = {
+  id: string
+  name: string
+  company: string
+  email: string
+  source: string
+  status: string
+  date: string
+}
+
+export type DashboardData = {
+  leadData: LeadData
+  campaignData: CampaignData
+  recentLeads: Lead[]
+}
+
+// --- Static data (not fetched from Supabase) ---
 
 export const insights = [
   {
@@ -171,9 +73,9 @@ export const insights = [
     title: "Weekend performance",
     description: "Saturday/Sunday leads down 45% — typical pattern confirmed",
   },
-];
+]
 
-// Platform-specific campaign data
+// Platform-specific campaign data (used on campaigns page — mock until that page is connected)
 export const platformData = {
   meta: {
     name: "Meta Ads",
@@ -188,78 +90,10 @@ export const platformData = {
     cpl: 60.19,
     conversions: 52,
     campaigns: [
-      {
-        id: "meta-1",
-        name: "Product Launch - Lookalike",
-        objective: "Conversions",
-        status: "active",
-        spend: 12400,
-        budget: 15000,
-        impressions: 680000,
-        clicks: 12200,
-        ctr: 1.79,
-        leads: 198,
-        cpl: 62.63,
-        conversions: 28,
-        revenue: 48600,
-        roas: 3.92,
-        startDate: "2024-01-15",
-        audience: "Lookalike 1%",
-      },
-      {
-        id: "meta-2",
-        name: "Retargeting - Website Visitors",
-        objective: "Conversions",
-        status: "active",
-        spend: 6200,
-        budget: 8000,
-        impressions: 320000,
-        clicks: 5800,
-        ctr: 1.81,
-        leads: 124,
-        cpl: 50.00,
-        conversions: 18,
-        revenue: 28400,
-        roas: 4.58,
-        startDate: "2024-01-20",
-        audience: "Website Visitors 30d",
-      },
-      {
-        id: "meta-3",
-        name: "Brand Awareness - Interest",
-        objective: "Awareness",
-        status: "active",
-        spend: 4200,
-        budget: 5000,
-        impressions: 180000,
-        clicks: 2800,
-        ctr: 1.56,
-        leads: 56,
-        cpl: 75.00,
-        conversions: 4,
-        revenue: 8200,
-        roas: 1.95,
-        startDate: "2024-02-01",
-        audience: "Interest Targeting",
-      },
-      {
-        id: "meta-4",
-        name: "Lead Gen - Carousel",
-        objective: "Lead Generation",
-        status: "paused",
-        spend: 2000,
-        budget: 4000,
-        impressions: 100000,
-        clicks: 1600,
-        ctr: 1.60,
-        leads: 34,
-        cpl: 58.82,
-        conversions: 2,
-        revenue: 4000,
-        roas: 2.00,
-        startDate: "2024-01-25",
-        audience: "Custom Audience",
-      },
+      { id: "meta-1", name: "Product Launch - Lookalike", objective: "Conversions", status: "active", spend: 12400, budget: 15000, impressions: 680000, clicks: 12200, ctr: 1.79, leads: 198, cpl: 62.63, conversions: 28, revenue: 48600, roas: 3.92, startDate: "2024-01-15", audience: "Lookalike 1%" },
+      { id: "meta-2", name: "Retargeting - Website Visitors", objective: "Conversions", status: "active", spend: 6200, budget: 8000, impressions: 320000, clicks: 5800, ctr: 1.81, leads: 124, cpl: 50.00, conversions: 18, revenue: 28400, roas: 4.58, startDate: "2024-01-20", audience: "Website Visitors 30d" },
+      { id: "meta-3", name: "Brand Awareness - Interest", objective: "Awareness", status: "active", spend: 4200, budget: 5000, impressions: 180000, clicks: 2800, ctr: 1.56, leads: 56, cpl: 75.00, conversions: 4, revenue: 8200, roas: 1.95, startDate: "2024-02-01", audience: "Interest Targeting" },
+      { id: "meta-4", name: "Lead Gen - Carousel", objective: "Lead Generation", status: "paused", spend: 2000, budget: 4000, impressions: 100000, clicks: 1600, ctr: 1.60, leads: 34, cpl: 58.82, conversions: 2, revenue: 4000, roas: 2.00, startDate: "2024-01-25", audience: "Custom Audience" },
     ],
     weeklyPerformance: [
       { week: "W1", spend: 5200, leads: 89, revenue: 19200 },
@@ -281,78 +115,10 @@ export const platformData = {
     cpl: 61.74,
     conversions: 38,
     campaigns: [
-      {
-        id: "google-1",
-        name: "Brand Search",
-        objective: "Search",
-        status: "active",
-        spend: 4200,
-        budget: 5000,
-        impressions: 120000,
-        clicks: 4800,
-        ctr: 4.00,
-        leads: 86,
-        cpl: 48.84,
-        conversions: 14,
-        revenue: 18200,
-        roas: 4.33,
-        startDate: "2024-01-01",
-        audience: "Brand Keywords",
-      },
-      {
-        id: "google-2",
-        name: "Non-Brand Search",
-        objective: "Search",
-        status: "active",
-        spend: 8600,
-        budget: 10000,
-        impressions: 340000,
-        clicks: 4200,
-        ctr: 1.24,
-        leads: 112,
-        cpl: 76.79,
-        conversions: 12,
-        revenue: 21400,
-        roas: 2.49,
-        startDate: "2024-01-01",
-        audience: "Generic Keywords",
-      },
-      {
-        id: "google-3",
-        name: "Display Remarketing",
-        objective: "Display",
-        status: "active",
-        spend: 3400,
-        budget: 4000,
-        impressions: 320000,
-        clicks: 2200,
-        ctr: 0.69,
-        leads: 62,
-        cpl: 54.84,
-        conversions: 8,
-        revenue: 12400,
-        roas: 3.65,
-        startDate: "2024-01-10",
-        audience: "Remarketing List",
-      },
-      {
-        id: "google-4",
-        name: "Performance Max",
-        objective: "Performance Max",
-        status: "active",
-        spend: 2200,
-        budget: 3000,
-        impressions: 110000,
-        clicks: 1200,
-        ctr: 1.09,
-        leads: 38,
-        cpl: 57.89,
-        conversions: 4,
-        revenue: 6200,
-        roas: 2.82,
-        startDate: "2024-02-05",
-        audience: "Auto Optimized",
-      },
+      { id: "google-1", name: "Brand Search", objective: "Search", status: "active", spend: 4200, budget: 5000, impressions: 120000, clicks: 4800, ctr: 4.00, leads: 86, cpl: 48.84, conversions: 14, revenue: 18200, roas: 4.33, startDate: "2024-01-01", audience: "Brand Keywords" },
+      { id: "google-2", name: "Non-Brand Search", objective: "Search", status: "active", spend: 8600, budget: 10000, impressions: 340000, clicks: 4200, ctr: 1.24, leads: 112, cpl: 76.79, conversions: 12, revenue: 21400, roas: 2.49, startDate: "2024-01-01", audience: "Generic Keywords" },
+      { id: "google-3", name: "Display Remarketing", objective: "Display", status: "active", spend: 3400, budget: 4000, impressions: 320000, clicks: 2200, ctr: 0.69, leads: 62, cpl: 54.84, conversions: 8, revenue: 12400, roas: 3.65, startDate: "2024-01-10", audience: "Remarketing List" },
+      { id: "google-4", name: "Performance Max", objective: "Performance Max", status: "active", spend: 2200, budget: 3000, impressions: 110000, clicks: 1200, ctr: 1.09, leads: 38, cpl: 57.89, conversions: 4, revenue: 6200, roas: 2.82, startDate: "2024-02-05", audience: "Auto Optimized" },
     ],
     weeklyPerformance: [
       { week: "W1", spend: 4100, leads: 68, revenue: 13200 },
@@ -374,60 +140,9 @@ export const platformData = {
     cpl: 90.14,
     conversions: 18,
     campaigns: [
-      {
-        id: "linkedin-1",
-        name: "B2B Decision Makers",
-        objective: "Lead Generation",
-        status: "active",
-        spend: 6400,
-        budget: 8000,
-        impressions: 140000,
-        clicks: 1900,
-        ctr: 1.36,
-        leads: 68,
-        cpl: 94.12,
-        conversions: 8,
-        revenue: 12400,
-        roas: 1.94,
-        startDate: "2024-01-15",
-        audience: "Director+ Titles",
-      },
-      {
-        id: "linkedin-2",
-        name: "Thought Leadership",
-        objective: "Engagement",
-        status: "active",
-        spend: 3200,
-        budget: 4000,
-        impressions: 80000,
-        clicks: 1100,
-        ctr: 1.38,
-        leads: 42,
-        cpl: 76.19,
-        conversions: 6,
-        revenue: 7200,
-        roas: 2.25,
-        startDate: "2024-01-20",
-        audience: "Industry Followers",
-      },
-      {
-        id: "linkedin-3",
-        name: "ABM - Enterprise",
-        objective: "Account-Based",
-        status: "paused",
-        spend: 3200,
-        budget: 5000,
-        impressions: 60000,
-        clicks: 700,
-        ctr: 1.17,
-        leads: 32,
-        cpl: 100.00,
-        conversions: 4,
-        revenue: 5000,
-        roas: 1.56,
-        startDate: "2024-02-01",
-        audience: "Target Account List",
-      },
+      { id: "linkedin-1", name: "B2B Decision Makers", objective: "Lead Generation", status: "active", spend: 6400, budget: 8000, impressions: 140000, clicks: 1900, ctr: 1.36, leads: 68, cpl: 94.12, conversions: 8, revenue: 12400, roas: 1.94, startDate: "2024-01-15", audience: "Director+ Titles" },
+      { id: "linkedin-2", name: "Thought Leadership", objective: "Engagement", status: "active", spend: 3200, budget: 4000, impressions: 80000, clicks: 1100, ctr: 1.38, leads: 42, cpl: 76.19, conversions: 6, revenue: 7200, roas: 2.25, startDate: "2024-01-20", audience: "Industry Followers" },
+      { id: "linkedin-3", name: "ABM - Enterprise", objective: "Account-Based", status: "paused", spend: 3200, budget: 5000, impressions: 60000, clicks: 700, ctr: 1.17, leads: 32, cpl: 100.00, conversions: 4, revenue: 5000, roas: 1.56, startDate: "2024-02-01", audience: "Target Account List" },
     ],
     weeklyPerformance: [
       { week: "W1", spend: 2800, leads: 32, revenue: 5400 },
@@ -436,4 +151,4 @@ export const platformData = {
       { week: "W4", spend: 3400, leads: 36, revenue: 6400 },
     ],
   },
-};
+}

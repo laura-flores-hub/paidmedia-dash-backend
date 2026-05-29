@@ -10,10 +10,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { campaignData } from "@/lib/dashboard-data";
+import type { Campaign } from "@/lib/dashboard-data";
 import { cn } from "@/lib/utils";
 
-export function CampaignsTable() {
+export function CampaignsTable({ campaigns }: { campaigns: Campaign[] }) {
   return (
     <Card className="border-border/50">
       <CardHeader className="pb-2">
@@ -33,28 +33,31 @@ export function CampaignsTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {campaignData.campaigns.map((campaign) => (
+            {campaigns.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
+                  No campaign data for this period.
+                </TableCell>
+              </TableRow>
+            )}
+            {campaigns.map((campaign) => (
               <TableRow key={campaign.name} className="border-border/50">
                 <TableCell className="text-sm font-medium">{campaign.name}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{campaign.platform}</TableCell>
                 <TableCell className="text-sm text-right">${campaign.spend.toLocaleString()}</TableCell>
                 <TableCell className="text-sm text-right">{campaign.leads}</TableCell>
                 <TableCell className="text-sm text-right">
-                  <span
-                    className={cn(
-                      campaign.cpl > 80 ? "text-chart-4" : campaign.cpl < 50 ? "text-chart-2" : ""
-                    )}
-                  >
-                    ${campaign.cpl.toFixed(2)}
+                  <span className={cn(
+                    campaign.cpl > 80 ? "text-chart-4" : campaign.cpl > 0 && campaign.cpl < 50 ? "text-chart-2" : ""
+                  )}>
+                    {campaign.cpl > 0 ? `$${campaign.cpl.toFixed(2)}` : "—"}
                   </span>
                 </TableCell>
                 <TableCell className="text-sm text-right">
-                  <span
-                    className={cn(
-                      campaign.roas >= 3 ? "text-chart-2" : campaign.roas < 2 ? "text-chart-4" : ""
-                    )}
-                  >
-                    {campaign.roas.toFixed(2)}x
+                  <span className={cn(
+                    campaign.roas >= 3 ? "text-chart-2" : campaign.roas > 0 && campaign.roas < 2 ? "text-chart-4" : ""
+                  )}>
+                    {campaign.roas > 0 ? `${campaign.roas.toFixed(2)}x` : "—"}
                   </span>
                 </TableCell>
                 <TableCell className="text-right">

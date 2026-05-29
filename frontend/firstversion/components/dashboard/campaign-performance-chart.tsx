@@ -2,20 +2,18 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
   Line,
   ComposedChart,
 } from "recharts";
-import { campaignData } from "@/lib/dashboard-data";
+import type { DailyPoint } from "@/lib/dashboard-data";
 
-export function CampaignPerformanceChart() {
+export function CampaignPerformanceChart({ dailyPerformance }: { dailyPerformance: DailyPoint[] }) {
   return (
     <Card className="border-border/50">
       <CardHeader className="pb-2">
@@ -37,7 +35,7 @@ export function CampaignPerformanceChart() {
         <div className="h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
-              data={campaignData.dailyPerformance}
+              data={dailyPerformance}
               margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -51,7 +49,7 @@ export function CampaignPerformanceChart() {
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
-                tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`}
               />
               <Tooltip
                 contentStyle={{
@@ -64,13 +62,7 @@ export function CampaignPerformanceChart() {
                 formatter={(value: number) => [`$${value.toLocaleString()}`, undefined]}
               />
               <Bar dataKey="spend" fill="var(--color-chart-1)" radius={[4, 4, 0, 0]} />
-              <Line
-                type="monotone"
-                dataKey="revenue"
-                stroke="var(--color-chart-2)"
-                strokeWidth={2}
-                dot={{ fill: "var(--color-chart-2)", r: 3 }}
-              />
+              <Line type="monotone" dataKey="revenue" stroke="var(--color-chart-2)" strokeWidth={2} dot={{ fill: "var(--color-chart-2)", r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
