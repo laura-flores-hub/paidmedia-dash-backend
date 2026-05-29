@@ -37,7 +37,7 @@ load_dotenv()
 
 META_ACCESS_TOKEN       = os.environ["META_ACCESS_TOKEN"]
 META_AD_ACCOUNT_IDS     = [a.strip() for a in os.environ["META_AD_ACCOUNT_IDS"].split(",")]
-HUBSPOT_TOKEN           = os.environ["TOKEN_ACESSO_HUBSPOT"]
+HUBSPOT_TOKEN           = os.environ["HUBSPOT_TOKEN"]
 LINKEDIN_ACCESS_TOKEN   = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_AD_ACCOUNT_IDS = [a.strip() for a in os.environ["LINKEDIN_AD_ACCOUNT_IDS"].split(",")]
 SUPABASE_URL            = os.environ["SUPABASE_URL"]
@@ -47,11 +47,11 @@ GOOGLE_ADS_YAML_PATH    = os.environ.get("GOOGLE_ADS_YAML_PATH", "google-ads.yam
 # ---------------------------------------------------------------------------
 # Constantes de Supabase (nomes das tabelas)
 # ---------------------------------------------------------------------------
-TABLE_META      = "teste_data_meta_01"
-TABLE_GOOGLE    = "teste_data_google_01"
-TABLE_LINKEDIN  = "teste_data_linkedin_01"
-TABLE_HUB       = "teste_01"
-TABLE_DEALS     = "teste_data_deals_01"
+TABLE_META      = "data_meta_v2"
+TABLE_GOOGLE    = "data_google_v2"
+TABLE_LINKEDIN  = "data_linkedin_v2"
+TABLE_HUB       = "data_hs_contacts_v2"
+TABLE_DEALS     = "data_hs_deals_v2"
 
 # Data de início histórico por fonte
 META_HISTORY_START      = "2023-09-21"
@@ -200,7 +200,7 @@ def _fetch_meta_ads_account(account_id: str, data_inicial: str, data_final: str)
 
         time_range  = json.dumps({"since": str(current), "until": str(chunk_end)})
         base_params = {
-            "fields":         "campaign_name,spend,date_start",
+            "fields":         "campaign_id,campaign_name,spend,date_start",
             "level":          "campaign",
             "time_increment": 1,
             "time_range":     time_range,
@@ -248,6 +248,7 @@ def process_meta_records(raw: list[dict], recording_ts: str) -> list[dict]:
         spend_val = r.get("spend")
         rows.append({
             "date_start":          r.get("date_start"),
+            "campaign_id":         r.get("campaign_id", ""),
             "campaign_name":       r.get("campaign_name", ""),
             "cost":                float(spend_val) if spend_val is not None else None,
             "ad_account_id":       r.get("_account_id", ""),
@@ -307,6 +308,7 @@ def fetch_google_ads(data_inicial: str, data_final: str) -> list[dict]:
 
     query = f"""
         SELECT
+            campaign.id,
             campaign.name,
             segments.date,
             metrics.cost_micros
@@ -325,6 +327,7 @@ def fetch_google_ads(data_inicial: str, data_final: str) -> list[dict]:
                 for row in batch.results:
                     cost = row.metrics.cost_micros / 1_000_000
                     records.append({
+                        "campaign_id":    str(row.campaign.id),
                         "campaign_name":  row.campaign.name,
                         "spend":          cost,
                         "date":           row.segments.date,
@@ -471,6 +474,7 @@ def _fetch_linkedin_ads_account(account_id: str, data_inicial: str, data_final: 
             for urn in e.get("pivotValues", []):
                 all_records.append({
                     "date_start":    date_str,
+                    "campaign_id":   urn.split(":")[-1],
                     "campaign_name": campaign_names.get(urn, urn),
                     "cost":          float(cost) if cost is not None else None,
                     "_account_id":   account_id,
@@ -499,6 +503,7 @@ def process_linkedin_records(raw: list[dict], recording_ts: str) -> list[dict]:
     """Converte os registros brutos do LinkedIn para o schema da tabela."""
     return [{
         "date_start":          r.get("date_start"),
+        "campaign_id":         r.get("campaign_id", ""),
         "campaign_name":       r.get("campaign_name", ""),
         "cost":                r.get("cost"),
         "ad_account_id":       r.get("_account_id", ""),
@@ -1153,6 +1158,7 @@ def main() -> None:
 
 PLATFORM_SEND_MAP = {
     "meta":     send_meta,
+    "google":   send_google,
     "linkedin": send_linkedin,
     "hubspot":  send_hubspot,
     "deals":    send_deals,

@@ -56,6 +56,19 @@ python dashspy_v1.py --retry
 ```
 Recarrega arquivos JSON salvos anteriormente em `outputs/` e reenvia ao Supabase sem re-coletar nas APIs. Útil para recuperar envios que falharam após uma coleta bem-sucedida.
 
+> **Plataformas disponíveis via `--retry`:** `meta`, `google`, `linkedin`, `hubspot`, `deals`
+
+### Pontos de reentrada — Resumo
+
+| Etapa | Mecanismo | Quando usar |
+|---|---|---|
+| Coleta Meta | Retry automático (até 5×, 60s de espera) | Rate limit — códigos 1, 4, 17 ou 341 |
+| Coleta LinkedIn | Retry automático (até 5×, 60s de espera) | Rate limit — HTTP 429 |
+| Coleta HubSpot Contacts | Retry automático (até 3×, por janela diária) | Paginação incompleta detectada |
+| Coleta Google Ads | Sem retry automático — erro por sub-conta é logado e a coleta continua nas demais | Falha em conta específica durante a coleta |
+| Envio — Fase 2 | Loop interativo no terminal ao final da rodada | Falha ao inserir no Supabase após confirmação |
+| Reenvio sem re-coletar | `python dashspy_v1.py --retry` | Processo interrompido após coleta; dados disponíveis em `outputs/` |
+
 ## APIs 
 ### API Meta
 #### Autenticação:
@@ -68,7 +81,7 @@ As credenciais estão discriminadas no arquivo .env nas seguintes variáveis:
 - https://graph.facebook.com/v25.0
 
 ##### URL Completa para retornar gastos em campanha:
-- {urlbase}/{META_AD_ACCOUNT_ID}/insights?fields=campaign_name%2Cspend&level=campaign&time_increment=1&time_range=%7B'since'%3A'{data_inicial}'%2C'until'%3A'{data_final}'%7D{pagepathbase}
+- {urlbase}/{META_AD_ACCOUNT_ID}/insights?fields=campaign_id%2Ccampaign_name%2Cspend&level=campaign&time_increment=1&time_range=%7B'since'%3A'{data_inicial}'%2C'until'%3A'{data_final}'%7D{pagepathbase}
 
 ##### Onde:
 - *data_inicial* = Data no formato aaaa-mm-dd
@@ -76,6 +89,7 @@ As credenciais estão discriminadas no arquivo .env nas seguintes variáveis:
 - *pagepathbase* = &access_token={META_ACCESS_TOKEN}
 
 #### Dados Retornados Esperados:
+- *campaign_id*: ID único da campanha de anúncios
 - *date_start*: datas de investimento de cada campanha de anúncios
 - *campaign_name*: nomes das campanhas de anúncios
 - *spend*: dados do investimento das campanhas de anúncios
@@ -114,9 +128,10 @@ A aquisição de dados utiliza a biblioteca oficial *google-ads* para Python, po
 
 ##### Query utilizada:
 SELECT<br>
+ campaign.id,<br>
  campaign.name,<br>
  segments.date,<br>
- metrics.cost_micros<br> 
+ metrics.cost_micros<br>
 FROM campaign<br>
 WHERE segments.date BETWEEN '{data_inicial}' AND '{data_final}'<br>
 ORDER BY segments.date DESC
@@ -126,11 +141,13 @@ ORDER BY segments.date DESC
 - *data_final*: Data no formato aaaa-mm-dd
 
 ##### Valores e suas respectivas variáveis:
+- *ID da Campanha*: campaign.id
 - *Data*: segments.date
 - *Nome da Campanha*: campaign.name
 - *Gasto*: metrics.cost_micros
 
 #### Dados Capturados:
+- *campaign.id*: ID único da campanha de anúncios
 - *segments.date*: datas de investimento de cada campanha de anúncios
 - *campaign.name*: nomes das campanhas de anúncios
 - *metrics.cost_micros*: dados do investimento das campanhas de anúncios, em micros (1 unidade = R$ 0,000001) - convertido para reais dividindo por 1.000.000
@@ -170,6 +187,7 @@ A aquisição de dados utiliza chamadas diretas à API REST do LinkedIn via `sub
 - *dateRange.start*: data de início do investimento
 - *costInLocalCurrency*: valor investido na campanha
 - *pivotValues*: URN da campanha (convertido para nome via endpoint `/adCampaignsV2/{id}`)
+- *campaign_id*: ID numérico da campanha, extraído do URN em `pivotValues` (ex.: `urn:li:sponsoredCampaign:12345` → `12345`)
 
 #### Funcionamento esperado:
 1. Verifica a última data registrada na tabela do LinkedIn no Supabase.
@@ -228,37 +246,40 @@ Deals criados a partir da última data registrada no Supabase, paginados em jane
 ## Supabase
 ### Tabelas:
 
-- `teste_data_meta_01`
+- `data_meta_v2`
 
 Field name | Type
 -- | --
 date_start | DATE
+campaign_id | STRING
 campaign_name | STRING
 cost | FLOAT
 ad_account_id | STRING
 dt_h_recording_data | TIMESTAMP
 
-- `teste_data_google_01`
+- `data_google_v2`
 
 Field name | Type
 -- | --
+campaign_id | STRING
 campaign_name | STRING
 spend | FLOAT
 date | DATE
 ad_account_id | STRING
 dt_h_recording_data | TIMESTAMP
 
-- `teste_data_linkedin_01`
+- `data_linkedin_v2`
 
 Field name | Type
 -- | --
 date_start | DATE
+campaign_id | STRING
 campaign_name | STRING
 cost | FLOAT
 ad_account_id | STRING
 dt_h_recording_data | TIMESTAMP
 
-- `teste_01` (HubSpot Contacts)
+- `data_hs_contacts_v2`
 
 Field name | Type
 -- | --
@@ -294,7 +315,7 @@ region | STRING
 main_country | STRING
 has_valid_deal | BOOLEAN
 
-- `teste_data_deals_01`
+- `data_hs_deals_v2`
 
 Field name | Type
 -- | --
