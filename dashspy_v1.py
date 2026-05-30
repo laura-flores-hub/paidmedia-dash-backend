@@ -145,19 +145,30 @@ def aguardar_confirmacao(nome: str, path: str) -> bool:
 # ---------------------------------------------------------------------------
 
 META_BASE_URL         = "https://graph.facebook.com/v25.0"
-META_RATE_LIMIT_CODES = {4, 17, 341}
+META_RATE_LIMIT_CODES = {1, 4, 17, 341}
 META_BATCH_SIZE       = 50
 META_RETRY_WAIT       = 60
-
-
-META_RATE_LIMIT_CODES = {1, 4, 17, 341}
 META_MAX_RETRIES      = 5
 
 def _meta_fetch_page(url: str, params: dict | None = None) -> dict:
-    """Faz uma requisição GET para a Meta API com retry automático em rate-limit."""
+    """Faz uma requisição GET para a Meta API com retry automático em rate-limit e timeout."""
     retries = 0
     while True:
-        resp = requests.get(url, params=params, timeout=60)
+        try:
+            resp = requests.get(url, params=params, timeout=60)
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            retries += 1
+            if retries > META_MAX_RETRIES:
+                raise RuntimeError(
+                    f"Meta API connection error após {META_MAX_RETRIES} tentativas."
+                )
+            log.warning(
+                "Meta connection error. Tentativa %d/%d — aguardando %ss…",
+                retries, META_MAX_RETRIES, META_RETRY_WAIT,
+            )
+            time.sleep(META_RETRY_WAIT)
+            continue
+
         try:
             data = resp.json()
         except ValueError:
@@ -188,8 +199,10 @@ def _meta_fetch_page(url: str, params: dict | None = None) -> dict:
         return data
 
 
-def _fetch_meta_ads_account(account_id: str, data_inicial: str, data_final: str) -> list[dict]:
-    """Busca insights de uma conta Meta Ads para o intervalo informado."""
+def _fetch_meta_ads_account(account_id: str, data_inicial: str, data_final: str) -> tuple[list[dict], bool]:
+    """Busca insights de uma conta Meta Ads. Retorna (records, completed).
+    completed=False indica que a coleta foi interrompida por erro — os registros
+    retornados correspondem apenas às janelas concluídas com sucesso."""
     all_records: list[dict] = []
     current = datetime.strptime(data_inicial, "%Y-%m-%d").date()
     end     = datetime.strptime(data_final,   "%Y-%m-%d").date()
@@ -210,35 +223,33 @@ def _fetch_meta_ads_account(account_id: str, data_inicial: str, data_final: str)
 
         url  = f"{META_BASE_URL}/{account_id}/insights"
         page = 0
-
-        while url:
-            page += 1
-            data    = _meta_fetch_page(url, params=base_params if page == 1 else None)
-            records = data.get("data", [])
-            for r in records:
-                r["_account_id"] = account_id
-            all_records.extend(records)
-            log.info("    Página %d: %d registros (total: %d).", page, len(records), len(all_records))
-            url = data.get("paging", {}).get("next")
+        chunk_records: list[dict] = []
+        try:
+            while url:
+                page += 1
+                data    = _meta_fetch_page(url, params=base_params if page == 1 else None)
+                records = data.get("data", [])
+                for r in records:
+                    r["_account_id"] = account_id
+                chunk_records.extend(records)
+                log.info("    Página %d: %d registros.", page, len(records))
+                url = data.get("paging", {}).get("next")
+            all_records.extend(chunk_records)
+        except Exception as exc:
+            log.error(
+                "Meta Ads: conta %s — erro na janela %s→%s: %s. "
+                "Salvando %d registros das janelas concluídas até %s.",
+                account_id, current, chunk_end, exc,
+                len(all_records),
+                current - timedelta(days=1) if all_records else "nenhum",
+            )
+            return all_records, False
 
         current = chunk_end + timedelta(days=1)
 
-    return all_records
+    return all_records, True
 
 
-def fetch_meta_ads(data_inicial: str, data_final: str) -> list[dict]:
-    """Busca insights de todas as contas Meta Ads configuradas."""
-    log.info("Meta Ads: buscando de %s até %s (%d contas).", data_inicial, data_final, len(META_AD_ACCOUNT_IDS))
-    all_records: list[dict] = []
-
-    for account_id in META_AD_ACCOUNT_IDS:
-        log.info("Meta Ads: processando conta %s.", account_id)
-        records = _fetch_meta_ads_account(account_id, data_inicial, data_final)
-        all_records.extend(records)
-        log.info("Meta Ads: conta %s — %d registros.", account_id, len(records))
-
-    log.info("Meta Ads: %d registros obtidos no total.", len(all_records))
-    return all_records
 
 
 def process_meta_records(raw: list[dict], recording_ts: str) -> list[dict]:
@@ -257,7 +268,11 @@ def process_meta_records(raw: list[dict], recording_ts: str) -> list[dict]:
     return rows
 
 
-def run_meta_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | None]:
+def run_meta_collect(
+    sb: Client,
+    recording_ts: str,
+    account_ids: list[str] | None = None,
+) -> tuple[list[dict], str | None]:
     """Coleta, processa e salva os dados do Meta Ads. Retorna (rows, path)."""
     log.info("=== Coletando Meta Ads ===")
     last = get_last_date(sb, TABLE_META, "date_start")
@@ -277,10 +292,32 @@ def run_meta_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | N
         log.info("Meta Ads já está atualizado. Nada a coletar.")
         return [], None
 
-    raw  = fetch_meta_ads(data_inicial, data_final)
-    rows = process_meta_records(raw, recording_ts)
-    path = save_temp("meta", rows, recording_ts)
-    return rows, path
+    targets = account_ids or META_AD_ACCOUNT_IDS
+    log.info("Meta Ads: buscando de %s até %s (%d contas).", data_inicial, data_final, len(targets))
+    all_rows: list[dict] = []
+    paths: list[str] = []
+
+    for account_id in targets:
+        log.info("Meta Ads: processando conta %s.", account_id)
+        raw, completed = _fetch_meta_ads_account(account_id, data_inicial, data_final)
+        if raw:
+            rows = process_meta_records(raw, recording_ts)
+            path = save_temp(f"meta_{account_id}", rows, recording_ts)
+            log.info("Meta Ads: conta %s — %d registros → %s", account_id, len(rows), path)
+            all_rows.extend(rows)
+            paths.append(path)
+        if not completed:
+            log.warning(
+                "Meta Ads: coleta interrompida na conta %s. "
+                "Use 'python dashspy_v1.py meta-resume' para retomar.",
+                account_id,
+            )
+            break
+
+    if not all_rows:
+        return [], None
+
+    return all_rows, ", ".join(paths)
 
 
 def send_meta(sb: Client, rows: list[dict]) -> None:
@@ -1243,6 +1280,98 @@ if __name__ == "__main__":
         main()
     elif _cmd == "--retry":
         retry_from_outputs()
+    elif _cmd == "meta":
+        print("\nContas Meta Ads disponíveis:")
+        for _i, _acc in enumerate(META_AD_ACCOUNT_IDS, 1):
+            print(f"  [{_i}] {_acc}")
+        _sel = input("\nNúmero(s) da(s) conta(s) a coletar (ex: 1,2) ou 'todas': ").strip()
+        if _sel.lower() in ("todas", "all", ""):
+            _selected_accounts = None
+        else:
+            _idxs = [int(x.strip()) - 1 for x in _sel.split(",") if x.strip().isdigit()]
+            _selected_accounts = [META_AD_ACCOUNT_IDS[i] for i in _idxs if 0 <= i < len(META_AD_ACCOUNT_IDS)]
+            if not _selected_accounts:
+                print("Nenhuma conta válida selecionada. Encerrando.")
+                sys.exit(1)
+        _recording_ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S UTC")
+        log.info("Coleta individual: Meta Ads — registro em: %s", _recording_ts)
+        _sb = get_supabase_client()
+        try:
+            _rows, _path = run_meta_collect(_sb, _recording_ts, account_ids=_selected_accounts)
+        except Exception as _exc:
+            log.error("Coleta [Meta Ads] falhou: %s", _exc, exc_info=True)
+            sys.exit(1)
+        if not _rows:
+            log.info("Meta Ads: nenhum dado novo.")
+            sys.exit(0)
+        if not aguardar_confirmacao("Meta Ads", _path):
+            log.warning("Envio do Meta Ads cancelado. Arquivos mantidos em: %s", _path)
+            sys.exit(0)
+        try:
+            send_meta(_sb, _rows)
+            log.info("Meta Ads: enviado com sucesso.")
+        except Exception as _exc:
+            log.error("Envio [Meta Ads] falhou: %s", _exc, exc_info=True)
+            sys.exit(1)
+    elif _cmd == "meta-resume":
+        from pathlib import Path as _Path
+        _output_dir = _Path("/workspaces/teste-claude/dashboard_paid/outputs")
+        print("\nContas Meta Ads disponíveis:")
+        for _i, _acc in enumerate(META_AD_ACCOUNT_IDS, 1):
+            print(f"  [{_i}] {_acc}")
+        _sel = input("\nNúmero da conta a retomar: ").strip()
+        if not _sel.isdigit() or not (1 <= int(_sel) <= len(META_AD_ACCOUNT_IDS)):
+            print("Seleção inválida. Encerrando.")
+            sys.exit(1)
+        _account_id = META_AD_ACCOUNT_IDS[int(_sel) - 1]
+        _files = sorted(_output_dir.glob(f"meta_{_account_id}_*.json"))
+        if not _files:
+            print(f"Nenhum arquivo encontrado para a conta {_account_id} em outputs/.")
+            sys.exit(1)
+        _latest_file = _files[-1]
+        _existing = json.loads(_latest_file.read_text(encoding="utf-8"))
+        if not _existing:
+            print(f"Arquivo {_latest_file.name} está vazio.")
+            sys.exit(1)
+        _last_date = max(r["date_start"] for r in _existing if r.get("date_start"))
+        _next_date = (datetime.strptime(_last_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        _data_final_input = input(f"Data final (AAAA-MM-DD) [Enter para ontem, {yesterday()}]: ").strip()
+        if _data_final_input:
+            try:
+                datetime.strptime(_data_final_input, "%Y-%m-%d")
+                _data_final = _data_final_input
+            except ValueError:
+                print("Formato de data inválido. Use AAAA-MM-DD.")
+                sys.exit(1)
+        else:
+            _data_final = yesterday()
+        log.info(
+            "Retomando conta %s — último date_start no arquivo: %s — coletando de %s até %s.",
+            _account_id, _last_date, _next_date, _data_final,
+        )
+        if _next_date > _data_final:
+            log.info("Conta %s já está completa até ontem.", _account_id)
+            sys.exit(0)
+        _recording_ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S UTC")
+        _sb = get_supabase_client()
+        _raw, _completed = _fetch_meta_ads_account(_account_id, _next_date, _data_final)
+        if not _raw:
+            log.info("Nenhum dado novo para a conta %s a partir de %s.", _account_id, _next_date)
+            sys.exit(0)
+        _rows = process_meta_records(_raw, _recording_ts)
+        _path = save_temp(f"meta_{_account_id}", _rows, _recording_ts)
+        log.info("Conta %s: %d registros → %s", _account_id, len(_rows), _path)
+        if not _completed:
+            log.warning("Coleta ainda incompleta. Arquivo salvo em: %s", _path)
+        if not aguardar_confirmacao("Meta Ads", _path):
+            log.warning("Envio cancelado. Arquivo mantido em: %s", _path)
+            sys.exit(0)
+        try:
+            send_meta(_sb, _rows)
+            log.info("Meta Ads: enviado com sucesso.")
+        except Exception as _exc:
+            log.error("Envio [Meta Ads] falhou: %s", _exc, exc_info=True)
+            sys.exit(1)
     elif _cmd in _PIPELINES:
         _nome, _fn_collect, _fn_send = _PIPELINES[_cmd]
         _recording_ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S UTC")
@@ -1267,5 +1396,5 @@ if __name__ == "__main__":
             sys.exit(1)
     else:
         print(f"Subcomando desconhecido: '{_cmd}'")
-        print("Uso: python dashspy_v1.py [meta|google|linkedin|hubspot|deals|--retry]")
+        print("Uso: python dashspy_v1.py [meta|meta-resume|google|linkedin|hubspot|deals|--retry]")
         sys.exit(1)

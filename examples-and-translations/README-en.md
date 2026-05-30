@@ -25,22 +25,23 @@ python dashspy_v1.py
 Runs the full pipeline: collects data from Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts, and HubSpot Deals, saves the results locally for review, and waits for confirmation before sending to Supabase.
 
 ```bash
+python dashspy_v1.py meta
+python dashspy_v1.py google
+python dashspy_v1.py linkedin
+python dashspy_v1.py hubspot
+python dashspy_v1.py deals
+```
+Runs the full cycle (collect → confirm → send) for a single platform. Useful for debugging or reprocessing a specific source without running the full pipeline. The `meta` subcommand asks which ad accounts to collect before starting.
+
+```bash
+python dashspy_v1.py meta-resume
+```
+Resumes a Meta Ads collection for a specific ad account from where it stopped. Prompts for the account to resume, finds the last `date_start` available in that account's output file, and collects from there + 1 day. Allows specifying a custom end date (default: yesterday).
+
+```bash
 python dashspy_v1.py --retry
 ```
 Reloads JSON files previously saved in `outputs/` and resends them to Supabase without re-collecting from the APIs. Useful for recovering sends that failed after a successful collection run.
-
-> **Platforms available via `--retry`:** `meta`, `google`, `linkedin`, `hubspot`, `deals`
-
-### Retry Entry Points — Summary
-
-| Stage | Mechanism | When to use |
-|---|---|---|
-| Meta collection | Automatic retry (up to 5×, 60s wait) | Rate limit — codes 1, 4, 17 or 341 |
-| LinkedIn collection | Automatic retry (up to 5×, 60s wait) | Rate limit — HTTP 429 |
-| HubSpot Contacts collection | Automatic retry (up to 3×, per daily window) | Incomplete pagination detected |
-| Google Ads collection | No automatic retry — error per sub-account is logged and collection continues for the remaining accounts | Failure on a specific account during collection |
-| Send — Phase 2 | Interactive loop in the terminal at the end of the round | Failure inserting into Supabase after confirmation |
-| Resend without re-collecting | `python dashspy_v1.py --retry` | Process interrupted after collection; data available in `outputs/` |
 
 ## APIs
 ### Meta API
@@ -75,11 +76,16 @@ Fetches all spend data from all campaigns. To do this, it considers the values a
 - *end_date* = current date − 1
 ###### Mandatory Pagination (`next`):
 The script implements a continuous pagination loop. It reads the first dataset and looks for a `next` key in the response, making sequential requests to the provided URL until no more pages are available.
-###### Rate Limiting Protection:
-Extraction is massive, which will trigger Meta's volume throttling. The script has `try/except` blocks designed to catch the following throttling errors and temporarily pause execution before retrying:
+###### Rate Limiting and Connection Error Protection:
+Extraction is massive, which will trigger Meta's volume throttling. The script has `try/except` blocks designed to catch the following throttling errors and pause 60s before retrying (up to 5×):
+- **Code 1:** Unknown (treated as transient)
 - **Code 4:** API Too Many Calls
 - **Code 17:** API User Too Many Calls
 - **Code 341:** Application limit reached
+
+Connection errors (`ConnectionError`) and timeouts (`ReadTimeout`) are also retried with the same logic.
+###### Mid-collection error recovery:
+Data is collected in annual windows. If an error occurs during pagination within a window (including invalid cursor `#2642`), the script immediately saves the records from already-completed windows to `outputs/meta_<account_id>_<timestamp>.json` and stops collection for that account. Use `python dashspy_v1.py meta-resume` to resume from the last available date.
 ###### Batch Requests:
 It respects the hard limit of 50 requests per batch.
 

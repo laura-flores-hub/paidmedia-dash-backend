@@ -31,7 +31,12 @@ python dashspy_v1.py linkedin
 python dashspy_v1.py hubspot
 python dashspy_v1.py deals
 ```
-Executa o ciclo completo (coleta → confirmação → envio) para uma única plataforma. Útil para depurar ou reprocessar uma fonte específica sem rodar o pipeline inteiro.
+Executa o ciclo completo (coleta → confirmação → envio) para uma única plataforma. Útil para depurar ou reprocessar uma fonte específica sem rodar o pipeline inteiro. O subcomando `meta` pergunta quais contas coletar antes de iniciar.
+
+```bash
+python dashspy_v1.py meta-resume
+```
+Retoma a coleta do Meta Ads para uma conta específica a partir do ponto onde parou. Pergunta qual conta retomar, encontra o último `date_start` disponível no arquivo de outputs dessa conta e coleta a partir daí + 1 dia. Permite informar uma data final personalizada (padrão: ontem).
 
 ```bash
 python dashspy_v1.py --retry
@@ -71,12 +76,16 @@ Busca todos os gastos de todas as campanhas. Para isso, considera os valores e r
 - *data_final* = data atual - 1
 ###### Paginação Obrigatória (`next`):
 O script implementa um loop de paginação contínua. Ele lê o primeiro conjunto de dados e busca por uma chave `next` na resposta, fazendo requisições sequenciais para essa URL fornecida até que não existam mais páginas disponíveis.
-###### Proteção Contra Rate Limiting:
-A extração é massiva, o que acionará as travas de volume da Meta. O script possui blocos `try/except` desenhados para capturar os seguintes erros de limite (throttling) e pausar a execução temporariamente antes de tentar novamente:
+###### Proteção Contra Rate Limiting e Erros de Conexão:
+A extração é massiva, o que acionará as travas de volume da Meta. O script possui blocos `try/except` desenhados para capturar os seguintes erros de limite (throttling) e pausar 60s antes de tentar novamente (até 5×):
 - **Código 1:** Unknown (tratado como transitório)
 - **Código 4:** API Too Many Calls
 - **Código 17:** API User Too Many Calls
 - **Código 341:** Application limit reached
+
+Erros de conexão (`ConnectionError`) e timeout (`ReadTimeout`) também são retentados com a mesma lógica.
+###### Recuperação de erros mid-coleta:
+Os dados são coletados em janelas anuais. Se um erro ocorrer durante a paginação de uma janela (incluindo cursor inválido `#2642`), o script salva imediatamente os registros das janelas já concluídas em `outputs/meta_<account_id>_<timestamp>.json` e encerra a coleta daquela conta. Use `python dashspy_v1.py meta-resume` para retomar a partir da última data disponível.
 ###### Batch Requests:
 Ele respeita o limite rígido de 50 requisições por lote.
 

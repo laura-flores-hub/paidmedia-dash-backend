@@ -25,22 +25,23 @@ python dashspy_v1.py
 Ejecuta el pipeline completo: recolecta datos de Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts y HubSpot Deals, guarda los resultados localmente para revisión y espera confirmación antes de enviarlos a Supabase.
 
 ```bash
+python dashspy_v1.py meta
+python dashspy_v1.py google
+python dashspy_v1.py linkedin
+python dashspy_v1.py hubspot
+python dashspy_v1.py deals
+```
+Ejecuta el ciclo completo (recolección → confirmación → envío) para una única plataforma. Útil para depurar o reprocesar una fuente específica sin ejecutar el pipeline completo. El subcomando `meta` pregunta qué cuentas publicitarias recolectar antes de iniciar.
+
+```bash
+python dashspy_v1.py meta-resume
+```
+Retoma la recolección de Meta Ads para una cuenta publicitaria específica desde donde se detuvo. Pregunta qué cuenta retomar, encuentra el último `date_start` disponible en el archivo de outputs de esa cuenta y recolecta a partir de ahí + 1 día. Permite especificar una fecha final personalizada (por defecto: ayer).
+
+```bash
 python dashspy_v1.py --retry
 ```
 Recarga archivos JSON guardados previamente en `outputs/` y los reenvía a Supabase sin volver a recolectar desde las APIs. Útil para recuperar envíos que fallaron tras una recolección exitosa.
-
-> **Plataformas disponibles via `--retry`:** `meta`, `google`, `linkedin`, `hubspot`, `deals`
-
-### Puntos de Reentrada — Resumen
-
-| Etapa | Mecanismo | Cuándo usar |
-|---|---|---|
-| Recolección Meta | Retry automático (hasta 5×, espera de 60s) | Rate limit — códigos 1, 4, 17 o 341 |
-| Recolección LinkedIn | Retry automático (hasta 5×, espera de 60s) | Rate limit — HTTP 429 |
-| Recolección HubSpot Contacts | Retry automático (hasta 3×, por ventana diaria) | Paginación incompleta detectada |
-| Recolección Google Ads | Sin retry automático — el error por subcuenta queda registrado en el log y la recolección continúa con las demás | Fallo en una cuenta específica durante la recolección |
-| Envío — Fase 2 | Bucle interactivo en el terminal al final de la ronda | Fallo al insertar en Supabase tras la confirmación |
-| Reenvío sin recolectar | `python dashspy_v1.py --retry` | Proceso interrumpido tras la recolección; datos disponibles en `outputs/` |
 
 ## APIs
 ### API Meta
@@ -75,11 +76,16 @@ Busca todos los gastos de todas las campañas. Para ello, considera los valores 
 - *fecha_final* = fecha actual − 1
 ###### Paginación Obligatoria (`next`):
 El script implementa un bucle de paginación continua. Lee el primer conjunto de datos y busca una clave `next` en la respuesta, haciendo solicitudes secuenciales a esa URL proporcionada hasta que no haya más páginas disponibles.
-###### Protección Contra Rate Limiting:
-La extracción es masiva, lo que activará los límites de volumen de Meta. El script cuenta con bloques `try/except` diseñados para capturar los siguientes errores de límite (throttling) y pausar la ejecución temporalmente antes de volver a intentar:
+###### Protección Contra Rate Limiting y Errores de Conexión:
+La extracción es masiva, lo que activará los límites de volumen de Meta. El script cuenta con bloques `try/except` diseñados para capturar los siguientes errores de límite (throttling) y pausar 60s antes de volver a intentar (hasta 5×):
+- **Código 1:** Unknown (tratado como transitorio)
 - **Código 4:** API Too Many Calls
 - **Código 17:** API User Too Many Calls
 - **Código 341:** Application limit reached
+
+Los errores de conexión (`ConnectionError`) y timeout (`ReadTimeout`) también se reintentan con la misma lógica.
+###### Recuperación de errores durante la recolección:
+Los datos se recolectan en ventanas anuales. Si ocurre un error durante la paginación de una ventana (incluido cursor inválido `#2642`), el script guarda de inmediato los registros de las ventanas ya completadas en `outputs/meta_<account_id>_<timestamp>.json` y detiene la recolección de esa cuenta. Use `python dashspy_v1.py meta-resume` para retomar desde la última fecha disponible.
 ###### Batch Requests:
 Respeta el límite estricto de 50 solicitudes por lote.
 
