@@ -25,22 +25,18 @@ python dashspy_v1.py
 Executa o pipeline completo: coleta dados de Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts e HubSpot Deals, salva os resultados localmente para revisão e aguarda confirmação antes de enviar ao Supabase.
 
 ```bash
+python dashspy_v1.py meta
+python dashspy_v1.py google
+python dashspy_v1.py linkedin
+python dashspy_v1.py hubspot
+python dashspy_v1.py deals
+```
+Executa o ciclo completo (coleta → confirmação → envio) para uma única plataforma. Útil para depurar ou reprocessar uma fonte específica sem rodar o pipeline inteiro.
+
+```bash
 python dashspy_v1.py --retry
 ```
 Recarrega arquivos JSON salvos anteriormente em `outputs/` e reenvia ao Supabase sem re-coletar nas APIs. Útil para recuperar envios que falharam após uma coleta bem-sucedida.
-
-> **Plataformas disponíveis via `--retry`:** `meta`, `google`, `linkedin`, `hubspot`, `deals`
-
-### Pontos de reentrada — Resumo
-
-| Etapa | Mecanismo | Quando usar |
-|---|---|---|
-| Coleta Meta | Retry automático (até 5×, 60s de espera) | Rate limit — códigos 1, 4, 17 ou 341 |
-| Coleta LinkedIn | Retry automático (até 5×, 60s de espera) | Rate limit — HTTP 429 |
-| Coleta HubSpot Contacts | Retry automático (até 3×, por janela diária) | Paginação incompleta detectada |
-| Coleta Google Ads | Sem retry automático — erro por sub-conta é logado e a coleta continua nas demais | Falha em conta específica durante a coleta |
-| Envio — Fase 2 | Loop interativo no terminal ao final da rodada | Falha ao inserir no Supabase após confirmação |
-| Reenvio sem re-coletar | `python dashspy_v1.py --retry` | Processo interrompido após coleta; dados disponíveis em `outputs/` |
 
 ## APIs 
 ### API Meta
@@ -77,6 +73,7 @@ Busca todos os gastos de todas as campanhas. Para isso, considera os valores e r
 O script implementa um loop de paginação contínua. Ele lê o primeiro conjunto de dados e busca por uma chave `next` na resposta, fazendo requisições sequenciais para essa URL fornecida até que não existam mais páginas disponíveis.
 ###### Proteção Contra Rate Limiting:
 A extração é massiva, o que acionará as travas de volume da Meta. O script possui blocos `try/except` desenhados para capturar os seguintes erros de limite (throttling) e pausar a execução temporariamente antes de tentar novamente:
+- **Código 1:** Unknown (tratado como transitório)
 - **Código 4:** API Too Many Calls
 - **Código 17:** API User Too Many Calls
 - **Código 341:** Application limit reached

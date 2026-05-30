@@ -121,7 +121,7 @@ def save_temp(platform: str, rows: list[dict], recording_ts: str) -> str:
     ts = recording_ts.replace(":", "-").replace(" ", "_")
     from pathlib import Path
 
-    OUTPUT_DIR = Path("outputs")
+    OUTPUT_DIR = Path("/workspaces/teste-claude/dashboard_paid/outputs")
     OUTPUT_DIR.mkdir(exist_ok=True)
 
     path = OUTPUT_DIR / f"{platform}_{ts}.json"
@@ -1228,7 +1228,44 @@ def retry_from_outputs() -> None:
 
 if __name__ == "__main__":
     import sys
-    if "--retry" in sys.argv:
-        retry_from_outputs()
-    else:
+
+    _PIPELINES = {
+        "meta":     ("Meta Ads",      run_meta_collect,     send_meta),
+        "google":   ("Google Ads",    run_google_collect,   send_google),
+        "linkedin": ("LinkedIn Ads",  run_linkedin_collect, send_linkedin),
+        "hubspot":  ("HubSpot",       run_hubspot_collect,  send_hubspot),
+        "deals":    ("HubSpot Deals", run_deals_collect,    send_deals),
+    }
+
+    _cmd = sys.argv[1] if len(sys.argv) > 1 else None
+
+    if _cmd is None:
         main()
+    elif _cmd == "--retry":
+        retry_from_outputs()
+    elif _cmd in _PIPELINES:
+        _nome, _fn_collect, _fn_send = _PIPELINES[_cmd]
+        _recording_ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S UTC")
+        log.info("Coleta individual: %s — registro em: %s", _nome, _recording_ts)
+        _sb = get_supabase_client()
+        try:
+            _rows, _path = _fn_collect(_sb, _recording_ts)
+        except Exception as _exc:
+            log.error("Coleta [%s] falhou: %s", _nome, _exc, exc_info=True)
+            sys.exit(1)
+        if not _rows:
+            log.info("%s: nenhum dado novo.", _nome)
+            sys.exit(0)
+        if not aguardar_confirmacao(_nome, _path):
+            log.warning("Envio do %s cancelado. Arquivo mantido em: %s", _nome, _path)
+            sys.exit(0)
+        try:
+            _fn_send(_sb, _rows)
+            log.info("%s: enviado com sucesso.", _nome)
+        except Exception as _exc:
+            log.error("Envio [%s] falhou: %s", _nome, _exc, exc_info=True)
+            sys.exit(1)
+    else:
+        print(f"Subcomando desconhecido: '{_cmd}'")
+        print("Uso: python dashspy_v1.py [meta|google|linkedin|hubspot|deals|--retry]")
+        sys.exit(1)
