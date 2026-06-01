@@ -25,7 +25,11 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
     handlers=[
         RichHandler(rich_tracebacks=True, markup=True),
-        logging.FileHandler("dashspy.log", mode="w", encoding="utf-8"),
+        logging.FileHandler(
+            f"dashspy_{os.getpid()}.log",
+            mode="w",
+            encoding="utf-8"
+        )
     ]
 )
 log = logging.getLogger(__name__)
@@ -590,32 +594,75 @@ CONTACT_PROPERTIES = [
     "hs_object_id",
     "createdate",
     "lastmodifieddate",
+
+    # Identificação / contato
     "firstname",
     "lastname",
     "email",
     "phone",
     "company",
+
+    # Lifecycle / status / owner
     "lifecyclestage",
     "hs_lead_status",
     "hubspot_owner_id",
+    "hubspot_owner_assigneddate",
+    "hubspot_team_id",
+
+    # Deals
     "num_associated_deals",
+    "first_deal_created_date",
+    "stage_of_the_deal",
+
+    # Original Traffic Source
     "hs_analytics_source",
+    "hs_analytics_source_data_1",
+    "hs_analytics_source_data_2",
+
+    # Latest Traffic Source
+    "hs_latest_source",
+    "hs_latest_source_data_1",
+    "hs_latest_source_data_2",
+    "hs_latest_source_timestamp",
+
+    # Conversions
     "hs_analytics_last_touch_converting_campaign",
+    "first_conversion_date",
+    "recent_conversion_date",
+    "conversion_de_lead",
+    "form_submitted",
+
+    # Record source
+    "hs_object_source_label",
+    "hs_object_source_detail_1",
+
+    # UTMs
+    "utm_term",
+    "utm_medium",
+    "utm_source",
+    "utm_content",
+    "utm_campaign",
+
+    # Engajamento / atividades
+    "hs_sa_first_engagement_date",
+    "notes_last_updated",
+    "notes_last_contacted",
+    "hs_last_sales_activity_timestamp",
+
+    # Qualificação / perfil
     "numemployees",
     "jobtitle",
     "not_qualified_reason",
     "estado_de_lead",
-    "hs_object_source_detail_1",
-    "hs_analytics_source_data_1",
-    "hs_analytics_source_data_2",
-    "stage_of_the_deal",
     "motivo_no_interesado",
-    "conversion_de_lead",
-    "hubspot_team_id",
-    "form_submitted",
+
+    # Localização
     "country",
     "region",
     "main_country",
+
+    # Campo customizado
+    "como_ficou_sabendo_sobre_nos_",
 ]
 
 
@@ -826,65 +873,106 @@ def process_hubspot_records(contacts: list[dict], recording_ts: str) -> list[dic
 
         row = {
             "dt_h_recording_data": recording_ts,
-            "hs_object_id":        props.get("hs_object_id") or str(contact.get("id", "")),
-            "createdate":          get_ts("createdate") or recording_ts,
-            "lastmodifieddate":    get_ts("lastmodifieddate"),
-            "firstname":           props.get("firstname"),
-            "lastname":            props.get("lastname"),
-            "email":               props.get("email"),
-            "phone":               props.get("phone"),
-            "company":             props.get("company"),
-            "lifecyclestage":      props.get("lifecyclestage"),
-            "hs_lead_status":      props.get("hs_lead_status"),
-            "hubspot_owner_id":    props.get("hubspot_owner_id"),
+
+            # Identificação
+            "hs_object_id":     cid,
+            "createdate":       get_ts("createdate") or recording_ts,
+            "lastmodifieddate": get_ts("lastmodifieddate"),
+
+            # Datas adicionais
+            "hs_latest_source_timestamp":       get_ts("hs_latest_source_timestamp"),
+            "first_deal_created_date":          get_ts("first_deal_created_date"),
+            "first_conversion_date":            get_ts("first_conversion_date"),
+            "hs_sa_first_engagement_date":      get_ts("hs_sa_first_engagement_date"),
+            "notes_last_updated":               get_ts("notes_last_updated"),
+            "notes_last_contacted":             get_ts("notes_last_contacted"),
+            "hs_last_sales_activity_timestamp": get_ts("hs_last_sales_activity_timestamp"),
+            "hubspot_owner_assigneddate":       get_ts("hubspot_owner_assigneddate"),
+            "recent_conversion_date":           get_ts("recent_conversion_date"),
+
+            # Dados básicos
+            "firstname": props.get("firstname"),
+            "lastname":  props.get("lastname"),
+            "email":     props.get("email"),
+            "phone":     props.get("phone"),
+            "company":   props.get("company"),
+
+            # Lifecycle / status / owner
+            "lifecyclestage":   props.get("lifecyclestage"),
+            "hs_lead_status":   props.get("hs_lead_status"),
+            "hubspot_owner_id": props.get("hubspot_owner_id"),
+            "hubspot_team_id":  props.get("hubspot_team_id"),
+
+            # Deals
             "num_associated_deals": (
                 int(props["num_associated_deals"])
                 if props.get("num_associated_deals") else None
             ),
-            "hs_analytics_source":                          props.get("hs_analytics_source"),
-            "hs_analytics_last_touch_converting_campaign":  props.get("hs_analytics_last_touch_converting_campaign"),
-            "numemployees":        props.get("numemployees"),
-            "jobtitle":            props.get("jobtitle"),
-            "not_qualified_reason":       props.get("not_qualified_reason"),
-            "estado_de_lead":             props.get("estado_de_lead"),
-            "hs_object_source_detail_1":   props.get("hs_object_source_detail_1"),
+            "stage_of_the_deal": props.get("stage_of_the_deal"),
+            "has_valid_deal":    valid_flags.get(cid, True),
+
+            # Original Traffic Source
+            "hs_analytics_source":         props.get("hs_analytics_source"),
             "hs_analytics_source_data_1":  props.get("hs_analytics_source_data_1"),
             "hs_analytics_source_data_2":  props.get("hs_analytics_source_data_2"),
-            "stage_of_the_deal":          props.get("stage_of_the_deal"),
-            "motivo_no_interesado":       props.get("motivo_no_interesado"),
-            "conversion_de_lead":         props.get("conversion_de_lead"),
-            "hubspot_team_id":            props.get("hubspot_team_id"),
-            "form_submitted":             props.get("form_submitted"),
-            "country":                    props.get("country"),
-            "region":                     props.get("region"),
-            "main_country":               props.get("main_country"),
-            "has_valid_deal":             valid_flags.get(cid, True),
+
+            # Latest Traffic Source
+            "hs_latest_source":            props.get("hs_latest_source"),
+            "hs_latest_source_data_1":     props.get("hs_latest_source_data_1"),
+            "hs_latest_source_data_2":     props.get("hs_latest_source_data_2"),
+
+            # Conversions
+            "hs_analytics_last_touch_converting_campaign": (
+                props.get("hs_analytics_last_touch_converting_campaign")
+            ),
+            "conversion_de_lead": props.get("conversion_de_lead"),
+            "form_submitted":     props.get("form_submitted"),
+
+            # Record source
+            "hs_object_source_label":    props.get("hs_object_source_label"),
+            "hs_object_source_detail_1": props.get("hs_object_source_detail_1"),
+
+            # UTMs
+            "utm_term":     props.get("utm_term"),
+            "utm_medium":   props.get("utm_medium"),
+            "utm_source":   props.get("utm_source"),
+            "utm_content":  props.get("utm_content"),
+            "utm_campaign": props.get("utm_campaign"),
+
+            # Qualificação / perfil
+            "numemployees":         props.get("numemployees"),
+            "jobtitle":             props.get("jobtitle"),
+            "not_qualified_reason": props.get("not_qualified_reason"),
+            "estado_de_lead":       props.get("estado_de_lead"),
+            "motivo_no_interesado": props.get("motivo_no_interesado"),
+
+            # Localização
+            "country":      props.get("country"),
+            "region":       props.get("region"),
+            "main_country": props.get("main_country"),
+
+            # Campo customizado
+            "como_ficou_sabendo_sobre_nos_": props.get("como_ficou_sabendo_sobre_nos_"),
         }
+
         rows.append(row)
 
     return rows
 
 
 def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | None]:
-    """Coleta HubSpot Contacts janela por janela e retorna todos para confirmação antes do envio."""
+    """Coleta todos os HubSpot Contacts desde HUBSPOT_HISTORY_START."""
     log.info("=== Coletando HubSpot Contacts ===")
-    last = get_last_date(sb, TABLE_HUB, "createdate")
 
-    if last is None:
-        start_date = HUBSPOT_HISTORY_START
-        log.info("Tabela HubSpot vazia. Carga histórica desde %s.", start_date)
-    else:
-        start_date = (
-            datetime.strptime(last[:10], "%Y-%m-%d") - timedelta(days=45)
-        ).strftime("%Y-%m-%d")
-        log.info("Último createdate HubSpot: %s. Lookback 45d → buscando a partir de %s.", last, start_date)
+    start_date = HUBSPOT_HISTORY_START
+    log.info("Carga completa de HubSpot Contacts desde %s.", start_date)
 
     dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     window_start = int(dt.timestamp() * 1000)
     now_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
 
     if window_start >= now_ms:
-        log.info("HubSpot já está atualizado. Nada a coletar.")
+        log.info("Data inicial está no futuro. Nada a coletar.")
         return [], None
 
     all_contacts: list[dict] = []
@@ -893,8 +981,14 @@ def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str 
         try:
             batch = _fetch_hubspot_contacts_window(window_start, window_end)
         except Exception as exc:
-            log.error("Timeout/erro na janela %s→%s: %s. Encerrando coleta.", window_start, window_end, exc)
+            log.error(
+                "Timeout/erro na janela %s→%s: %s. Encerrando coleta.",
+                window_start,
+                window_end,
+                exc,
+            )
             break
+
         log.info("  Janela %s→%s: %d contacts.", window_start, window_end, len(batch))
         all_contacts.extend(batch)
         window_start = window_end
@@ -1077,25 +1171,18 @@ def process_deal_records(deals: list[dict], recording_ts: str) -> list[dict]:
 
 
 def run_deals_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | None]:
-    """Coleta HubSpot Deals janela por janela e retorna todos para confirmação antes do envio."""
+    """Coleta todos os HubSpot Deals desde HUBSPOT_HISTORY_START."""
     log.info("=== Coletando HubSpot Deals ===")
-    last = get_last_date(sb, TABLE_DEALS, "createdate")
 
-    if last is None:
-        start_date = HUBSPOT_HISTORY_START
-        log.info("Tabela Deals vazia. Carga histórica desde %s.", start_date)
-    else:
-        start_date = (
-            datetime.strptime(last[:10], "%Y-%m-%d") + timedelta(days=1)
-        ).strftime("%Y-%m-%d")
-        log.info("Último createdate Deals: %s. Buscando a partir de %s.", last, start_date)
+    start_date = HUBSPOT_HISTORY_START
+    log.info("Carga completa de HubSpot Deals desde %s.", start_date)
 
     dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     window_start = int(dt.timestamp() * 1000)
     now_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
 
     if window_start >= now_ms:
-        log.info("Deals já está atualizado. Nada a coletar.")
+        log.info("Data inicial está no futuro. Nada a coletar.")
         return [], None
 
     all_deals: list[dict] = []
@@ -1104,8 +1191,14 @@ def run_deals_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | 
         try:
             batch = _fetch_hubspot_deals_window(window_start, window_end)
         except Exception as exc:
-            log.error("Timeout/erro na janela %s→%s: %s. Encerrando coleta.", window_start, window_end, exc)
+            log.error(
+                "Timeout/erro na janela %s→%s: %s. Encerrando coleta.",
+                window_start,
+                window_end,
+                exc,
+            )
             break
+
         log.info("  Janela %s→%s: %d deals.", window_start, window_end, len(batch))
         all_deals.extend(batch)
         window_start = window_end
