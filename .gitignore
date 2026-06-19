@@ -44,7 +44,8 @@ jsons
 versoes-anteriores.md
 temp
 /outputs
-consolidation
+/consolidation
+
 ## Raw data exports (large files)
 *.json
 !frontend/**/*.json

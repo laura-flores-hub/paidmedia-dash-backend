@@ -15,23 +15,41 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from google.ads.googleads.client import GoogleAdsClient
 from rich.logging import RichHandler
-
+from pathlib import Path
 # ---------------------------------------------------------------------------
 # Configuração de logging
 # ---------------------------------------------------------------------------
+
+LOG_DIR = Path(__file__).resolve().parent / "logs"
+
+# ADICIONADO: cria a pasta "logs" se ela ainda não existir
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# ADICIONADO: define o caminho completo do arquivo de log
+# Antes era só "dashspy_123.log"; agora é "logs/dashspy_123.log"
+LOG_FILE = LOG_DIR / f"dashspy_{os.getpid()}.log"
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(message)s",
     datefmt="%H:%M:%S",
     handlers=[
         RichHandler(rich_tracebacks=True, markup=True),
+
+        # ALTERADO: antes você passava só o nome do arquivo
+        # f"dashspy_{os.getpid()}.log"
+        #
+        # Agora você passa o caminho completo:
+        # logs/dashspy_123.log
         logging.FileHandler(
-            f"dashspy_{os.getpid()}.log",
+            LOG_FILE,
             mode="w",
             encoding="utf-8"
         )
     ]
 )
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
