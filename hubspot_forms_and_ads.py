@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
 """
-Extrai, por contato, todos os FORMS submetidos + AD INTERACTIONS (fallback)
+Extrai, por contato, FORMS submetidos + AD INTERACTIONS + PAGE VIEWS
 via Events API v3 do HubSpot.
 
 Lógica:
     - Fonte principal: form submissions (merge de 3 event types relacionados)
-    - Fonte de fallback: e_ad_interaction (cobre contatos sem form ou
-      forms sem hsa_* no query_params)
+    - Fallback 1: e_ad_interaction (campaign/adset/ad com IDs e nomes)
+    - Fallback 2: e_visited_page (URL pode revelar origem via hsa_* ou utm)
 
 Uso:
     pip install requests python-dotenv
     # .env precisa ter: HUBSPOT_TOKEN=pat-na1-xxxx
-    python hubspot_forms_and_ads.py --days 7 --limit 20
 
-Saída: 2 CSVs
+    # Testa primeiro com amostra pequena:
+    python hubspot_forms_and_ads.py --months 3 --limit 50
+
+    # Roda completo (TODOS os contatos com conversão nos últimos 3m):
+    python hubspot_forms_and_ads.py --months 3
+
+Saída: 3 CSVs
     - forms_per_contact.csv
     - ad_interactions_fallback.csv
+    - page_views_fallback.csv
 """
 
 import argparse
@@ -53,14 +59,22 @@ def get_headers():
 
 
 # ----------------------------------------------------------------------
-def search_recent_contacts(headers, days, limit, filter_marketing=True):
-    print(f"\n→ Buscando contatos criados nos últimos {days} dias (limit={limit})...")
+def search_converted_contacts(headers, months, max_contacts=0, filter_marketing=True):
+    """
+    Pagina por todos os contatos que tiveram conversão (form submission)
+    nos últimos N meses. Usa recent_conversion_date como filtro temporal,
+    o que pega tanto leads novos quanto reengajamentos.
+    """
+    print(f"\n→ Buscando contatos com conversão nos últimos {months} meses...")
     if filter_marketing:
-        print(f"  ↳ filtro ativo: hs_latest_source != OFFLINE (use --all-contacts pra desligar)")
-    after_ms = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp() * 1000)
+        print(f"  ↳ filtro: hs_latest_source != OFFLINE")
+    if max_contacts:
+        print(f"  ↳ teto de {max_contacts} contatos (use --limit 0 pra ilimitado)")
+
+    after_ms = int((datetime.now(timezone.utc) - timedelta(days=months * 30)).timestamp() * 1000)
 
     filters = [{
-        "propertyName": "createdate",
+        "propertyName": "recent_conversion_date",
         "operator": "GTE",
         "value": str(after_ms),
     }]
@@ -71,36 +85,78 @@ def search_recent_contacts(headers, days, limit, filter_marketing=True):
             "value": "OFFLINE",
         })
 
-    body = {
-        "filterGroups": [{"filters": filters}],
-        "sorts": [{"propertyName": "createdate", "direction": "DESCENDING"}],
-        "properties": ["email", "firstname", "createdate",
-                       "hs_analytics_source", "hs_latest_source"],
-        "limit": min(limit, 100),
-    }
-    r = requests.post(f"{BASE_URL}/crm/v3/objects/contacts/search",
-                      headers=headers, json=body)
-    if r.status_code != 200:
-        sys.exit(f"Erro buscando contatos: {r.status_code} {r.text[:300]}")
-    contacts = r.json().get("results", [])
-    print(f"  Encontrados: {len(contacts)}")
-    return contacts
+    all_contacts = []
+    after = None
+    page = 0
+
+    while True:
+        page += 1
+        body = {
+            "filterGroups": [{"filters": filters}],
+            "sorts": [{"propertyName": "recent_conversion_date", "direction": "DESCENDING"}],
+            "properties": ["email", "firstname", "createdate",
+                           "hs_analytics_source", "hs_latest_source",
+                           "recent_conversion_date"],
+            "limit": 100,
+        }
+        if after:
+            body["after"] = after
+
+        r = requests.post(f"{BASE_URL}/crm/v3/objects/contacts/search",
+                          headers=headers, json=body)
+        if r.status_code != 200:
+            sys.exit(f"Erro buscando contatos (página {page}): "
+                     f"{r.status_code} {r.text[:300]}")
+
+        data = r.json()
+        page_contacts = data.get("results", [])
+        all_contacts.extend(page_contacts)
+        after = data.get("paging", {}).get("next", {}).get("after")
+
+        print(f"  página {page:>3}: +{len(page_contacts):>3}  "
+              f"(total acumulado: {len(all_contacts)})")
+
+        if not after or not page_contacts:
+            break
+        if max_contacts and len(all_contacts) >= max_contacts:
+            all_contacts = all_contacts[:max_contacts]
+            print(f"  ↳ atingido teto de {max_contacts}, parando paginação")
+            break
+        time.sleep(0.1)
+
+    print(f"  ✓ Total: {len(all_contacts)} contatos")
+    return all_contacts
 
 
-def fetch_contact_events(headers, contact_id, days):
-    """Puxa TODOS os eventos do contato (filtramos localmente)."""
-    after_iso = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-    params = {
-        "objectType": "contact",
-        "objectId": contact_id,
-        "occurredAfter": after_iso,
-        "limit": 100,
-    }
-    r = requests.get(f"{BASE_URL}/events/v3/events", headers=headers, params=params)
-    if r.status_code != 200:
-        print(f"   [contact {contact_id}] erro {r.status_code}")
-        return []
-    return r.json().get("results", [])
+def fetch_contact_events(headers, contact_id, months):
+    """Pagina TODOS os eventos do contato dentro do período."""
+    after_iso = (datetime.now(timezone.utc) - timedelta(days=months * 30)).isoformat()
+    all_events = []
+    after = None
+
+    while True:
+        params = {
+            "objectType": "contact",
+            "objectId": contact_id,
+            "occurredAfter": after_iso,
+            "limit": 100,
+        }
+        if after:
+            params["after"] = after
+
+        r = requests.get(f"{BASE_URL}/events/v3/events", headers=headers, params=params)
+        if r.status_code != 200:
+            print(f"   [contact {contact_id}] erro {r.status_code}")
+            return all_events
+
+        data = r.json()
+        all_events.extend(data.get("results", []))
+        after = data.get("paging", {}).get("next", {}).get("after")
+        if not after:
+            break
+        time.sleep(0.05)
+
+    return all_events
 
 
 # ----------------------------------------------------------------------
@@ -260,24 +316,32 @@ def write_csv(rows, path):
 # ----------------------------------------------------------------------
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--days", type=int, default=7)
-    p.add_argument("--limit", type=int, default=20,
-                   help="máx. de contatos a inspecionar")
+    p.add_argument("--months", type=int, default=3,
+                   help="janela de tempo em meses (default: 3)")
+    p.add_argument("--limit", type=int, default=0,
+                   help="teto de contatos a processar (0 = ilimitado, default: 0)")
     p.add_argument("--all-contacts", action="store_true",
-                   help="desliga o filtro de hs_latest_source preenchido")
+                   help="desliga o filtro de hs_latest_source != OFFLINE")
     p.add_argument("--forms-output", type=str, default="forms_per_contact.csv")
     p.add_argument("--ads-output", type=str, default="ad_interactions_fallback.csv")
     p.add_argument("--pages-output", type=str, default="page_views_fallback.csv")
     args = p.parse_args()
 
     headers = get_headers()
-    contacts = search_recent_contacts(headers, args.days, args.limit,
-                                       filter_marketing=not args.all_contacts)
+    contacts = search_converted_contacts(
+        headers, args.months, args.limit,
+        filter_marketing=not args.all_contacts,
+    )
 
     if not contacts:
         sys.exit("Nenhum contato encontrado.")
 
-    print(f"\n→ Puxando timeline de {len(contacts)} contatos...")
+    # estimativa de tempo (assumindo ~0.4s por contato com paginação leve)
+    est_min = (len(contacts) * 0.4) / 60
+    print(f"\n→ Puxando timeline de {len(contacts)} contatos "
+          f"(estimativa: ~{est_min:.1f} min)...")
+    verbose = len(contacts) < 50  # printa todos só se for amostra pequena
+
     all_forms = []
     all_ads = []
     all_pages = []
@@ -290,7 +354,7 @@ def main():
         cid = contact["id"]
         email = contact["properties"].get("email") or "(sem email)"
         latest_source = contact["properties"].get("hs_latest_source") or "(vazio)"
-        events = fetch_contact_events(headers, cid, args.days)
+        events = fetch_contact_events(headers, cid, args.months)
 
         forms = consolidate_form_submissions(events, email, cid)
         ads = extract_ad_interactions(events, email, cid)
@@ -300,12 +364,11 @@ def main():
         all_ads.extend(ads)
         all_pages.extend(pages)
 
-        # contadores
-        if forms and ads:               stats["with_both"] += 1
-        elif forms:                     stats["with_form"] += 1
-        elif ads:                       stats["with_ad"] += 1
-        elif pages:                     stats["with_page_only"] += 1
-        else:                           stats["with_neither"] += 1
+        if forms and ads:   stats["with_both"] += 1
+        elif forms:         stats["with_form"] += 1
+        elif ads:           stats["with_ad"] += 1
+        elif pages:         stats["with_page_only"] += 1
+        else:               stats["with_neither"] += 1
         for f in forms:
             if f.get("has_ad_attribution"):
                 stats["forms_with_ad_attr"] += 1
@@ -315,20 +378,22 @@ def main():
             if pv.get("has_ad_attribution"):
                 stats["pages_with_ad_attr"] += 1
 
-        print(f"  [{i:>3}/{len(contacts)}] {email[:38]:<38} "
-              f"[{latest_source[:18]:<18}] → "
-              f"{len(forms)} forms, {len(ads)} ads, {len(pages)} pgs")
+        if verbose or i % 25 == 0 or i == len(contacts):
+            print(f"  [{i:>4}/{len(contacts)}] {email[:36]:<36} "
+                  f"[{latest_source[:14]:<14}] → "
+                  f"{len(forms)}F {len(ads)}A {len(pages)}P")
         time.sleep(0.1)
 
     # ------------------------------------------------------------------
     print(f"\n{'=' * 60}")
     print("RESUMO")
     print(f"{'=' * 60}")
-    print(f"  Contatos com forms:               {stats['with_form']}")
-    print(f"  Contatos com ad_interaction:      {stats['with_ad']}  ← fallback 1")
-    print(f"  Contatos só com page views:       {stats['with_page_only']}  ← fallback 2")
-    print(f"  Contatos com forms + ads:         {stats['with_both']}")
-    print(f"  Contatos sem nenhum:              {stats['with_neither']}")
+    print(f"  Contatos processados:             {len(contacts)}")
+    print(f"  ↳ com forms:                      {stats['with_form']}")
+    print(f"  ↳ com ad_interaction:             {stats['with_ad']}  (fallback 1)")
+    print(f"  ↳ só com page views:              {stats['with_page_only']}  (fallback 2)")
+    print(f"  ↳ com forms + ads:                {stats['with_both']}")
+    print(f"  ↳ sem nenhum:                     {stats['with_neither']}")
     print(f"")
     print(f"  Total de form submissions:        {len(all_forms)}")
     print(f"    ↳ com hsa_* (vieram de ad):     {stats['forms_with_ad_attr']}")
