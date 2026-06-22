@@ -49,7 +49,7 @@ temp
 ## Raw data exports (large files)
 *.json
 !frontend/**/*.json
-dashspy.log
+logs
 *.csv
 
 # Analysis outputs

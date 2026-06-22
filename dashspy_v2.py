@@ -1,5 +1,5 @@
 """
-dashspy_v1.py
+dashspy_v2.py
 Coleta dados de Meta Ads, Google Ads e HubSpot e centraliza no Supabase.
 """
 
@@ -21,14 +21,8 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 LOG_DIR = Path(__file__).resolve().parent / "logs"
-
-# ADICIONADO: cria a pasta "logs" se ela ainda não existir
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-
-# ADICIONADO: define o caminho completo do arquivo de log
-# Antes era só "dashspy_123.log"; agora é "logs/dashspy_123.log"
 LOG_FILE = LOG_DIR / f"dashspy_{os.getpid()}.log"
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,17 +30,7 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
     handlers=[
         RichHandler(rich_tracebacks=True, markup=True),
-
-        # ALTERADO: antes você passava só o nome do arquivo
-        # f"dashspy_{os.getpid()}.log"
-        #
-        # Agora você passa o caminho completo:
-        # logs/dashspy_123.log
-        logging.FileHandler(
-            LOG_FILE,
-            mode="w",
-            encoding="utf-8"
-        )
+        logging.FileHandler(LOG_FILE, mode="w", encoding="utf-8")
     ]
 )
 
@@ -98,6 +82,13 @@ def first_day_last_month_ms() -> int:
     return int(dt.timestamp() * 1000)
 
 
+def _recording_ts_to_ms(recording_ts: str) -> int:
+    """Converte 'YYYY-MM-DDTHH:MM:SS UTC' (formato do recording_ts) pra epoch ms UTC."""
+    cleaned = recording_ts.replace(" UTC", "")
+    dt = datetime.strptime(cleaned, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+    return int(dt.timestamp() * 1000)
+
+
 # ---------------------------------------------------------------------------
 # Supabase — cliente e utilitários
 # ---------------------------------------------------------------------------
@@ -117,6 +108,48 @@ def get_last_date(sb: Client, table: str, date_col: str) -> str | None:
     if val is None:
         return None
     return str(val)[:10]  # garante formato YYYY-MM-DD
+
+
+def get_last_recording(sb: Client, table: str) -> int | None:
+    """
+    Retorna o timestamp (epoch ms UTC) da última coleta nessa tabela
+    (max dt_h_recording_data), ou None se a tabela estiver vazia.
+
+    Usado por run_hubspot_collect / run_deals_collect pra decidir entre
+    carga full (tabela vazia) e incremental (delta desde a última coleta).
+    """
+    response = (
+        sb.table(table)
+        .select("dt_h_recording_data")
+        .order("dt_h_recording_data", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        return None
+    val = response.data[0].get("dt_h_recording_data")
+    if not val:
+        return None
+    val_str = str(val).replace(" UTC", "").rstrip("Z")
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+    ):
+        try:
+            dt = datetime.strptime(val_str, fmt).replace(tzinfo=timezone.utc)
+            return int(dt.timestamp() * 1000)
+        except ValueError:
+            continue
+    try:
+        dt = datetime.fromisoformat(val_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1000)
+    except (ValueError, AttributeError):
+        log.warning("Não consegui parsear dt_h_recording_data='%s'", val)
+        return None
 
 
 def insert_rows(sb: Client, table: str, rows: list[dict], batch_size: int = 500, on_conflict: str | None = None) -> None:
@@ -709,9 +742,16 @@ def _parse_timestamp(val: str | None) -> str | None:
         return None
 
 
-def _fetch_hubspot_contacts_window(since_ms: int, until_ms: int, max_retries: int = 3) -> list[dict]:
+def _fetch_hubspot_contacts_window(since_ms: int, until_ms: int,
+                                    filter_property: str = "createdate",
+                                    max_retries: int = 3) -> list[dict]:
     """
-    Busca contacts em uma janela de tempo [since_ms, until_ms).
+    Busca contacts em uma janela de tempo [since_ms, until_ms) usando
+    `filter_property` como coluna temporal.
+
+    - `createdate` (default): pega só contatos criados no intervalo (carga full inicial).
+    - `lastmodifieddate`: pega criados + modificados no intervalo (carga incremental).
+
     A Search API limita a 10.000 resultados por query; janelas menores evitam o limite.
     Valida count do API vs resultados paginados; re-tenta se faltar algum.
     """
@@ -727,8 +767,8 @@ def _fetch_hubspot_contacts_window(since_ms: int, until_ms: int, max_retries: in
                 "filterGroups": [
                     {
                         "filters": [
-                            {"propertyName": "createdate", "operator": "GTE", "value": str(since_ms)},
-                            {"propertyName": "createdate", "operator": "LT",  "value": str(until_ms)},
+                            {"propertyName": filter_property, "operator": "GTE", "value": str(since_ms)},
+                            {"propertyName": filter_property, "operator": "LT",  "value": str(until_ms)},
                         ]
                     }
                 ],
@@ -979,25 +1019,47 @@ def process_hubspot_records(contacts: list[dict], recording_ts: str) -> list[dic
 
 
 def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | None]:
-    """Coleta todos os HubSpot Contacts desde HUBSPOT_HISTORY_START."""
+    """
+    Coleta HubSpot Contacts em dois modos:
+      - FULL (tabela vazia): pega tudo desde HUBSPOT_HISTORY_START por `createdate`.
+      - INCREMENTAL (tabela com dados): pega criados E modificados desde a última
+        coleta (max dt_h_recording_data), filtrando por `lastmodifieddate`.
+    O cutoff superior é fixo no `recording_ts` (snapshot consistente — events
+    novos durante o run ficam pra próxima execução).
+    """
     log.info("=== Coletando HubSpot Contacts ===")
 
-    start_date = HUBSPOT_HISTORY_START
-    log.info("Carga completa de HubSpot Contacts desde %s.", start_date)
+    # Cutoff superior fixo
+    now_ms = _recording_ts_to_ms(recording_ts)
 
-    dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    window_start = int(dt.timestamp() * 1000)
-    now_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+    last_recording_ms = get_last_recording(sb, TABLE_HUB)
+
+    if last_recording_ms is None:
+        # Modo FULL — tabela vazia
+        dt = datetime.strptime(HUBSPOT_HISTORY_START, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        window_start = int(dt.timestamp() * 1000)
+        filter_property = "createdate"
+        log.info("Tabela vazia → modo FULL: createdate >= %s.", HUBSPOT_HISTORY_START)
+    else:
+        # Modo INCREMENTAL
+        window_start = last_recording_ms
+        filter_property = "lastmodifieddate"
+        last_dt = datetime.fromtimestamp(last_recording_ms / 1000, tz=timezone.utc)
+        log.info("Última coleta: %s → modo INCREMENTAL: lastmodifieddate >= %s.",
+                 last_dt.isoformat(), last_dt.isoformat())
 
     if window_start >= now_ms:
-        log.info("Data inicial está no futuro. Nada a coletar.")
+        log.info("Nada a coletar (window_start >= recording_ts).")
         return [], None
 
     all_contacts: list[dict] = []
     while window_start < now_ms:
         window_end = min(window_start + 1 * 24 * 3600 * 1000, now_ms)
         try:
-            batch = _fetch_hubspot_contacts_window(window_start, window_end)
+            batch = _fetch_hubspot_contacts_window(
+                window_start, window_end,
+                filter_property=filter_property,
+            )
         except Exception as exc:
             log.error(
                 "Timeout/erro na janela %s→%s: %s. Encerrando coleta.",
@@ -1123,8 +1185,14 @@ def _fetch_deal_contacts(deal_ids: list[str]) -> dict[str, list[str]]:
     return result
 
 
-def _fetch_hubspot_deals_window(since_ms: int, until_ms: int) -> list[dict]:
-    """Busca deals creados en la ventana [since_ms, until_ms)."""
+def _fetch_hubspot_deals_window(since_ms: int, until_ms: int,
+                                  filter_property: str = "createdate") -> list[dict]:
+    """
+    Busca deals em uma janela [since_ms, until_ms) usando `filter_property`.
+
+    - `createdate` (default): só deals criados no intervalo (carga full inicial).
+    - `lastmodifieddate`: criados + modificados (carga incremental).
+    """
     url = f"{HUBSPOT_BASE_URL}/deals/search"
     all_deals: list[dict] = []
     after: str | None = None
@@ -1133,8 +1201,8 @@ def _fetch_hubspot_deals_window(since_ms: int, until_ms: int) -> list[dict]:
         payload: dict = {
             "filterGroups": [{
                 "filters": [
-                    {"propertyName": "createdate", "operator": "GTE", "value": str(since_ms)},
-                    {"propertyName": "createdate", "operator": "LT",  "value": str(until_ms)},
+                    {"propertyName": filter_property, "operator": "GTE", "value": str(since_ms)},
+                    {"propertyName": filter_property, "operator": "LT",  "value": str(until_ms)},
                 ]
             }],
             "properties": DEAL_PROPERTIES,
@@ -1189,25 +1257,45 @@ def process_deal_records(deals: list[dict], recording_ts: str) -> list[dict]:
 
 
 def run_deals_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | None]:
-    """Coleta todos os HubSpot Deals desde HUBSPOT_HISTORY_START."""
+    """
+    Coleta HubSpot Deals em dois modos:
+      - FULL (tabela vazia): pega tudo desde HUBSPOT_HISTORY_START por `createdate`.
+      - INCREMENTAL (tabela com dados): pega criados E modificados desde a última
+        coleta (max dt_h_recording_data), filtrando por `lastmodifieddate`.
+    Cutoff superior fixo no `recording_ts` (snapshot consistente).
+    """
     log.info("=== Coletando HubSpot Deals ===")
 
-    start_date = HUBSPOT_HISTORY_START
-    log.info("Carga completa de HubSpot Deals desde %s.", start_date)
+    now_ms = _recording_ts_to_ms(recording_ts)
 
-    dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    window_start = int(dt.timestamp() * 1000)
-    now_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+    last_recording_ms = get_last_recording(sb, TABLE_DEALS)
+
+    if last_recording_ms is None:
+        # Modo FULL
+        dt = datetime.strptime(HUBSPOT_HISTORY_START, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        window_start = int(dt.timestamp() * 1000)
+        filter_property = "createdate"
+        log.info("Tabela vazia → modo FULL: createdate >= %s.", HUBSPOT_HISTORY_START)
+    else:
+        # Modo INCREMENTAL — em deals a propriedade certa é hs_lastmodifieddate (com prefixo)
+        window_start = last_recording_ms
+        filter_property = "hs_lastmodifieddate"
+        last_dt = datetime.fromtimestamp(last_recording_ms / 1000, tz=timezone.utc)
+        log.info("Última coleta: %s → modo INCREMENTAL: hs_lastmodifieddate >= %s.",
+                 last_dt.isoformat(), last_dt.isoformat())
 
     if window_start >= now_ms:
-        log.info("Data inicial está no futuro. Nada a coletar.")
+        log.info("Nada a coletar (window_start >= recording_ts).")
         return [], None
 
     all_deals: list[dict] = []
     while window_start < now_ms:
         window_end = min(window_start + 1 * 24 * 3600 * 1000, now_ms)
         try:
-            batch = _fetch_hubspot_deals_window(window_start, window_end)
+            batch = _fetch_hubspot_deals_window(
+                window_start, window_end,
+                filter_property=filter_property,
+            )
         except Exception as exc:
             log.error(
                 "Timeout/erro na janela %s→%s: %s. Encerrando coleta.",

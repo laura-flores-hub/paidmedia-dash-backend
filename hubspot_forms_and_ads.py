@@ -12,11 +12,16 @@ Uso:
     pip install requests python-dotenv
     # .env precisa ter: HUBSPOT_TOKEN=pat-na1-xxxx
 
-    # Testa primeiro com amostra pequena:
-    python hubspot_forms_and_ads.py --months 3 --limit 50
+    # Análises do dia a dia:
+    python hubspot_forms_and_ads.py --last-1h        # última hora
+    python hubspot_forms_and_ads.py --last-24h       # últimas 24 horas
 
-    # Roda completo (TODOS os contatos com conversão nos últimos 3m):
-    python hubspot_forms_and_ads.py --months 3
+    # Janelas customizadas:
+    python hubspot_forms_and_ads.py --hours 6        # últimas 6 horas
+    python hubspot_forms_and_ads.py --months 1       # último mês
+
+    # Default (3 meses, tudo):
+    python hubspot_forms_and_ads.py
 
 Saída: 3 CSVs
     - forms_per_contact.csv
@@ -59,19 +64,20 @@ def get_headers():
 
 
 # ----------------------------------------------------------------------
-def search_converted_contacts(headers, months, max_contacts=0, filter_marketing=True):
+def search_converted_contacts(headers, after_dt, window_label,
+                              max_contacts=0, filter_marketing=True):
     """
     Pagina por todos os contatos que tiveram conversão (form submission)
-    nos últimos N meses. Usa recent_conversion_date como filtro temporal,
+    a partir de after_dt. Usa recent_conversion_date como filtro temporal,
     o que pega tanto leads novos quanto reengajamentos.
     """
-    print(f"\n→ Buscando contatos com conversão nos últimos {months} meses...")
+    print(f"\n→ Buscando contatos com conversão {window_label}...")
     if filter_marketing:
         print(f"  ↳ filtro: hs_latest_source != OFFLINE")
     if max_contacts:
         print(f"  ↳ teto de {max_contacts} contatos (use --limit 0 pra ilimitado)")
 
-    after_ms = int((datetime.now(timezone.utc) - timedelta(days=months * 30)).timestamp() * 1000)
+    after_ms = int(after_dt.timestamp() * 1000)
 
     filters = [{
         "propertyName": "recent_conversion_date",
@@ -128,9 +134,15 @@ def search_converted_contacts(headers, months, max_contacts=0, filter_marketing=
     return all_contacts
 
 
-def fetch_contact_events(headers, contact_id, months):
-    """Pagina TODOS os eventos do contato dentro do período."""
-    after_iso = (datetime.now(timezone.utc) - timedelta(days=months * 30)).isoformat()
+def fetch_contact_events(headers, contact_id, after_dt, before_dt):
+    """
+    Pagina TODOS os eventos do contato no intervalo [after_dt, before_dt].
+    before_dt é fixado no início do run pra garantir snapshot consistente:
+    todos os contatos têm o mesmo cutoff temporal, independente da hora
+    em que cada um foi processado.
+    """
+    after_iso = after_dt.isoformat()
+    before_iso = before_dt.isoformat()
     all_events = []
     after = None
 
@@ -139,6 +151,7 @@ def fetch_contact_events(headers, contact_id, months):
             "objectType": "contact",
             "objectId": contact_id,
             "occurredAfter": after_iso,
+            "occurredBefore": before_iso,
             "limit": 100,
         }
         if after:
@@ -181,7 +194,7 @@ def round_to_minute(iso_ts):
     return iso_ts[:16]  # "2026-06-12T02:38"
 
 
-def consolidate_form_submissions(events, contact_email, contact_id):
+def consolidate_form_submissions(events, contact_email, contact_id, extracted_at):
     """
     Junta os 3 form events relacionados (mesmo form_id + mesmo minuto) em
     uma única linha por submissão.
@@ -237,11 +250,12 @@ def consolidate_form_submissions(events, contact_email, contact_id):
     submissions = []
     for key, data in groups.items():
         data["has_ad_attribution"] = bool(data.get("hsa_cam"))
+        data["extracted_at"] = extracted_at
         submissions.append(data)
     return submissions
 
 
-def extract_ad_interactions(events, contact_email, contact_id):
+def extract_ad_interactions(events, contact_email, contact_id, extracted_at):
     """Extrai e_ad_interaction como linhas planas."""
     interactions = []
     for ev in events:
@@ -249,6 +263,7 @@ def extract_ad_interactions(events, contact_email, contact_id):
             continue
         p = ev.get("properties") or {}
         interactions.append({
+            "event_id": ev.get("id"),
             "contact_email": contact_email,
             "contact_id": contact_id,
             "occurred_at": ev.get("occurredAt"),
@@ -264,11 +279,12 @@ def extract_ad_interactions(events, contact_email, contact_id):
             "utm_source": p.get("hs_utm_source"),
             "utm_campaign": p.get("hs_utm_campaign"),
             "utm_medium": p.get("hs_utm_medium"),
+            "extracted_at": extracted_at,
         })
     return interactions
 
 
-def extract_page_views(events, contact_email, contact_id):
+def extract_page_views(events, contact_email, contact_id, extracted_at):
     """
     Extrai e_visited_page como linhas planas.
     Fallback do fallback: quando o contato não tem form nem ad_interaction,
@@ -281,6 +297,7 @@ def extract_page_views(events, contact_email, contact_id):
         p = ev.get("properties") or {}
         ad_attr = parse_ad_attribution_from_query_params(p.get("hs_query_params"))
         views.append({
+            "event_id": ev.get("id"),
             "contact_email": contact_email,
             "contact_id": contact_id,
             "viewed_at": ev.get("occurredAt"),
@@ -296,6 +313,7 @@ def extract_page_views(events, contact_email, contact_id):
             "hsa_grp": ad_attr.get("hsa_grp"),
             "hsa_ad":  ad_attr.get("hsa_ad"),
             "has_ad_attribution": bool(ad_attr.get("hsa_cam")),
+            "extracted_at": extracted_at,
         })
     return views
 
@@ -314,10 +332,33 @@ def write_csv(rows, path):
 
 
 # ----------------------------------------------------------------------
+def resolve_window(args):
+    """
+    Decide a janela temporal e devolve (after_dt, label_humano).
+    Prioridade: --last-1h > --last-24h > --hours > --months.
+    """
+    now = datetime.now(timezone.utc)
+    if args.last_1h:
+        return now - timedelta(hours=1), "na última hora"
+    if args.last_24h:
+        return now - timedelta(hours=24), "nas últimas 24h"
+    if args.hours:
+        return now - timedelta(hours=args.hours), f"nas últimas {args.hours}h"
+    return now - timedelta(days=args.months * 30), f"nos últimos {args.months} meses"
+
+
 def main():
     p = argparse.ArgumentParser()
+    # janela temporal — flags em ordem de prioridade
+    p.add_argument("--last-1h", action="store_true",
+                   help="atalho: última 1 hora (análise quase-real-time)")
+    p.add_argument("--last-24h", action="store_true",
+                   help="atalho: últimas 24 horas (revisão diária)")
+    p.add_argument("--hours", type=int, default=0,
+                   help="janela em horas (sobrescreve --months se > 0)")
     p.add_argument("--months", type=int, default=3,
-                   help="janela de tempo em meses (default: 3)")
+                   help="janela em meses (default: 3)")
+    # outros
     p.add_argument("--limit", type=int, default=0,
                    help="teto de contatos a processar (0 = ilimitado, default: 0)")
     p.add_argument("--all-contacts", action="store_true",
@@ -328,8 +369,15 @@ def main():
     args = p.parse_args()
 
     headers = get_headers()
+    after_dt, window_label = resolve_window(args)
+    # before_dt = cutoff superior fixo (garante snapshot consistente entre contatos)
+    # também é o valor canônico de extracted_at — todos os registros do mesmo
+    # run carregam exatamente esse timestamp.
+    before_dt = datetime.now(timezone.utc)
+    extracted_at = before_dt.isoformat()
+
     contacts = search_converted_contacts(
-        headers, args.months, args.limit,
+        headers, after_dt, window_label, args.limit,
         filter_marketing=not args.all_contacts,
     )
 
@@ -354,11 +402,11 @@ def main():
         cid = contact["id"]
         email = contact["properties"].get("email") or "(sem email)"
         latest_source = contact["properties"].get("hs_latest_source") or "(vazio)"
-        events = fetch_contact_events(headers, cid, args.months)
+        events = fetch_contact_events(headers, cid, after_dt, before_dt)
 
-        forms = consolidate_form_submissions(events, email, cid)
-        ads = extract_ad_interactions(events, email, cid)
-        pages = extract_page_views(events, email, cid)
+        forms = consolidate_form_submissions(events, email, cid, extracted_at)
+        ads = extract_ad_interactions(events, email, cid, extracted_at)
+        pages = extract_page_views(events, email, cid, extracted_at)
 
         all_forms.extend(forms)
         all_ads.extend(ads)
