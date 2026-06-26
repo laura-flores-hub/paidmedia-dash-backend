@@ -402,6 +402,7 @@ def main():
         cid = contact["id"]
         email = contact["properties"].get("email") or "(sem email)"
         latest_source = contact["properties"].get("hs_latest_source") or "(vazio)"
+
         events = fetch_contact_events(headers, cid, after_dt, before_dt)
 
         forms = consolidate_form_submissions(events, email, cid, extracted_at)
