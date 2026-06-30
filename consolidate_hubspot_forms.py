@@ -50,10 +50,10 @@ from urllib.parse import parse_qs
 # CONFIGURAÇÃO
 # -----------------------------------------------------------------------------
 OUTPUT_DIR = Path(
-    "/workspaces/teste-claude/dashboard_paid/hubspot_eventos"
+    "hubspot_eventos"
 )
 
-RUNS_DIR_NAME = "/workspaces/teste-claude/dashboard_paid/hubspot_eventos/_runs"
+RUNS_DIR_NAME = "_runs"
 CONSOLIDATED_DIR_NAME = "_consolidated/forms"
 CONSOLIDATION_VERSION = "1.0.0"
 
