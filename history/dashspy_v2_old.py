@@ -90,87 +90,6 @@ def _recording_ts_to_ms(recording_ts: str) -> int:
     return int(dt.timestamp() * 1000)
 
 
-DAY_MS = 24 * 60 * 60 * 1000
-
-HUBSPOT_WINDOW_MAX_RETRIES = 3
-HUBSPOT_WINDOW_RETRY_WAIT = 10
-
-
-class RetryPointPending(RuntimeError):
-    """Indica que uma coleta ficou incompleta e possui um retry point salvo."""
-
-
-def _ms_to_iso(timestamp_ms: int) -> str:
-    """Converte epoch ms UTC para ISO 8601, apenas para exibição nos logs."""
-    return datetime.fromtimestamp(
-        timestamp_ms / 1000,
-        tz=timezone.utc,
-    ).isoformat()
-
-
-def _retry_directory() -> Path:
-    """Retorna a pasta onde ficam os retry points de Contacts e Deals."""
-    path = Path(PATH_OUTPUTS_M) / "_retry_points"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _retry_state_path(source: str) -> Path:
-    return _retry_directory() / f"{source}_retry_state.json"
-
-
-def _retry_raw_path(source: str, recording_ts: str) -> Path:
-    safe_ts = recording_ts.replace(":", "-").replace(" ", "_")
-    return _retry_directory() / f"{source}_partial_raw_{safe_ts}.json"
-
-
-def _write_json_atomic(path: Path, payload) -> None:
-    """Grava JSON de modo atômico para reduzir risco de checkpoint corrompido."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_name(path.name + ".tmp")
-
-    with temp_path.open("w", encoding="utf-8") as file:
-        json.dump(payload, file, ensure_ascii=False, indent=2, default=str)
-
-    temp_path.replace(path)
-
-
-def _read_json_file(path: Path):
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)
-
-
-def _load_retry_state(source: str) -> dict | None:
-    path = _retry_state_path(source)
-    if not path.exists():
-        return None
-    return _read_json_file(path)
-
-
-def _save_retry_state(source: str, state: dict) -> None:
-    payload = {
-        **state,
-        "source": source,
-        "updated_at": datetime.now(
-            tz=timezone.utc
-        ).strftime("%Y-%m-%dT%H:%M:%S.%f UTC"),
-    }
-    _write_json_atomic(_retry_state_path(source), payload)
-
-
-def _clear_retry_state(source: str) -> None:
-    """Remove o retry point somente depois de um envio bem-sucedido."""
-    state = _load_retry_state(source)
-
-    if state:
-        partial_raw_path = state.get("partial_raw_path")
-        if partial_raw_path:
-            Path(partial_raw_path).unlink(missing_ok=True)
-
-    _retry_state_path(source).unlink(missing_ok=True)
-    log.info("Retry point de %s removido.", source)
-
-
 # ---------------------------------------------------------------------------
 # Supabase — cliente e utilitários
 # ---------------------------------------------------------------------------
@@ -838,10 +757,8 @@ def _fetch_hubspot_contacts_window(since_ms: int, until_ms: int,
     Valida count do API vs resultados paginados; re-tenta se faltar algum.
     """
     url = f"{HUBSPOT_BASE_URL}/contacts/search"
-    last_obtained = 0
-    last_expected = 0
 
-    for attempt in range(1, max_retries + 1):
+    for attempt in range(max_retries):
         all_contacts: list[dict] = []
         after: str | None = None
         expected_total: int | None = None
@@ -867,36 +784,26 @@ def _fetch_hubspot_contacts_window(since_ms: int, until_ms: int,
             data = resp.json()
 
             if expected_total is None:
-                expected_total = int(data.get("total", 0))
+                expected_total = data.get("total", 0)
 
             results = data.get("results", [])
             all_contacts.extend(results)
 
             paging = data.get("paging", {})
-            after = paging.get("next", {}).get("after") if paging else None
+            after  = paging.get("next", {}).get("after") if paging else None
             if not after:
                 break
 
-        last_obtained = len(all_contacts)
-        last_expected = expected_total or 0
-
-        if last_obtained >= last_expected:
+        if expected_total is not None and len(all_contacts) >= expected_total:
             return all_contacts
 
-        log.warning(
-            "  Paginação incompleta: esperados %d, obtidos %d. Reintento %d/%d.",
-            last_expected,
-            last_obtained,
-            attempt,
-            max_retries,
-        )
+        log.warning("  Paginación incompleta: esperados %d, obtenidos %d. Reintento %d/%d.",
+                     expected_total, len(all_contacts), attempt + 1, max_retries)
 
-    raise RuntimeError(
-        "Paginação incompleta na janela de Contacts: "
-        f"esperados={last_expected}, "
-        f"obtidos={last_obtained}, "
-        f"tentativas={max_retries}"
-    )
+    log.warning("  Después de %d reintentos, obtenidos %d/%d. Continuando con lo que hay.",
+                 max_retries, len(all_contacts), expected_total)
+    return all_contacts
+
 
 def fetch_hubspot_contacts(since_ms: int) -> list[dict]:
     """
@@ -1112,107 +1019,6 @@ def process_hubspot_records(contacts: list[dict], recording_ts: str) -> list[dic
     return rows
 
 
-def _collect_hubspot_windows_with_retry_point(
-    *,
-    source: str,
-    object_label: str,
-    fetch_window,
-    window_start: int,
-    cutoff_ms: int,
-    filter_property: str,
-    recording_ts: str,
-    existing_objects: list[dict] | None = None,
-) -> tuple[list[dict], bool]:
-    """
-    Coleta objetos do HubSpot por janelas e persiste o ponto exato de falha.
-
-    O `cutoff_ms` e o `recording_ts` são sempre os da run original. Em caso
-    de nova falha durante um retry, o checkpoint passa a apontar para essa
-    nova janela, sem alterar o cutoff original.
-    """
-    all_objects = list(existing_objects or [])
-
-    while window_start < cutoff_ms:
-        window_end = min(window_start + DAY_MS, cutoff_ms)
-        batch: list[dict] | None = None
-        last_exception: Exception | None = None
-
-        for attempt in range(1, HUBSPOT_WINDOW_MAX_RETRIES + 1):
-            try:
-                batch = fetch_window(
-                    window_start,
-                    window_end,
-                    filter_property=filter_property,
-                )
-                break
-            except Exception as exc:
-                last_exception = exc
-
-                if attempt < HUBSPOT_WINDOW_MAX_RETRIES:
-                    log.warning(
-                        "%s: erro na janela %s→%s. "
-                        "Tentativa %d/%d — aguardando %ss. Erro: %s",
-                        object_label,
-                        window_start,
-                        window_end,
-                        attempt,
-                        HUBSPOT_WINDOW_MAX_RETRIES,
-                        HUBSPOT_WINDOW_RETRY_WAIT,
-                        exc,
-                    )
-                    time.sleep(HUBSPOT_WINDOW_RETRY_WAIT)
-
-        if batch is None:
-            partial_raw_path = _retry_raw_path(source, recording_ts)
-
-            # Só contém janelas concluídas integralmente.
-            _write_json_atomic(partial_raw_path, all_objects)
-
-            _save_retry_state(
-                source,
-                {
-                    "status": "pending_collection",
-                    "recording_ts": recording_ts,
-                    "cutoff_ms": cutoff_ms,
-                    "resume_from_ms": window_start,
-                    "failed_window_end_ms": window_end,
-                    "filter_property": filter_property,
-                    "partial_raw_path": str(partial_raw_path),
-                    "complete_output_path": None,
-                    "last_error": str(last_exception),
-                },
-            )
-
-            log.error(
-                "%s: coleta interrompida. "
-                "Retry point=%s (%s); fim da janela=%s (%s); "
-                "cutoff original=%s (%s); objetos preservados=%d.",
-                object_label,
-                window_start,
-                _ms_to_iso(window_start),
-                window_end,
-                _ms_to_iso(window_end),
-                cutoff_ms,
-                _ms_to_iso(cutoff_ms),
-                len(all_objects),
-            )
-
-            return all_objects, False
-
-        log.info(
-            "  Janela %s→%s: %d %s.",
-            window_start,
-            window_end,
-            len(batch),
-            object_label,
-        )
-
-        all_objects.extend(batch)
-        window_start = window_end
-
-    return all_objects, True
-
-
 def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | None]:
     """
     Coleta HubSpot Contacts em dois modos:
@@ -1221,20 +1027,12 @@ def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str 
         coleta (max dt_h_recording_data), filtrando por `lastmodifieddate`.
     O cutoff superior é fixo no `recording_ts` (snapshot consistente — events
     novos durante o run ficam pra próxima execução).
-
-    Se uma janela falhar, cria um retry point e não retorna dados parciais
-    para envio ao Supabase.
     """
     log.info("=== Coletando HubSpot Contacts ===")
 
-    if _load_retry_state("hubspot"):
-        raise RetryPointPending(
-            "Existe um retry pendente de HubSpot Contacts. "
-            "Execute: python dashspy_v2.py hubspot-resume"
-        )
-
-    # Cutoff superior fixo no início da run.
+    # Cutoff superior fixo
     now_ms = _recording_ts_to_ms(recording_ts)
+
     last_recording_ms = get_last_recording(sb, TABLE_HUB)
 
     if last_recording_ms is None:
@@ -1251,28 +1049,30 @@ def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str 
         log.info("Última coleta: %s → modo INCREMENTAL: lastmodifieddate >= %s.",
                  last_dt.isoformat(), last_dt.isoformat())
 
-    log.info("Cutoff fixo da run para Contacts: %s.", _ms_to_iso(now_ms))
-
     if window_start >= now_ms:
         log.info("Nada a coletar (window_start >= recording_ts).")
         return [], None
 
-    all_contacts, completed = _collect_hubspot_windows_with_retry_point(
-        source="hubspot",
-        object_label="contacts",
-        fetch_window=_fetch_hubspot_contacts_window,
-        window_start=window_start,
-        cutoff_ms=now_ms,
-        filter_property=filter_property,
-        recording_ts=recording_ts,
-    )
+    all_contacts: list[dict] = []
+    while window_start < now_ms:
+        window_end = min(window_start + 1 * 24 * 3600 * 1000, now_ms)
+        try:
+            batch = _fetch_hubspot_contacts_window(
+                window_start, window_end,
+                filter_property=filter_property,
+            )
+        except Exception as exc:
+            log.error(
+                "Timeout/erro na janela %s→%s: %s. Encerrando coleta.",
+                window_start,
+                window_end,
+                exc,
+            )
+            break
 
-    if not completed:
-        raise RetryPointPending(
-            "A coleta de HubSpot Contacts ficou incompleta. "
-            "O retry point foi salvo. "
-            "Execute: python dashspy_v2.py hubspot-resume"
-        )
+        log.info("  Janela %s→%s: %d contacts.", window_start, window_end, len(batch))
+        all_contacts.extend(batch)
+        window_start = window_end
 
     if not all_contacts:
         return [], None
@@ -1281,6 +1081,7 @@ def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str 
     path = save_temp("hubspot", rows, recording_ts)
     log.info("HubSpot: %d contacts coletados.", len(rows))
     return rows, path
+
 
 def send_hubspot(sb: Client, rows: list[dict]) -> None:
     insert_rows(sb, TABLE_HUB, rows, on_conflict="hs_object_id")
@@ -1461,21 +1262,13 @@ def run_deals_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | 
     Coleta HubSpot Deals em dois modos:
       - FULL (tabela vazia): pega tudo desde HUBSPOT_HISTORY_START por `createdate`.
       - INCREMENTAL (tabela com dados): pega criados E modificados desde a última
-        coleta (max dt_h_recording_data), filtrando por `hs_lastmodifieddate`.
+        coleta (max dt_h_recording_data), filtrando por `lastmodifieddate`.
     Cutoff superior fixo no `recording_ts` (snapshot consistente).
-
-    Se uma janela falhar, cria um retry point e não retorna dados parciais
-    para envio ao Supabase.
     """
     log.info("=== Coletando HubSpot Deals ===")
 
-    if _load_retry_state("deals"):
-        raise RetryPointPending(
-            "Existe um retry pendente de HubSpot Deals. "
-            "Execute: python dashspy_v2.py deals-resume"
-        )
-
     now_ms = _recording_ts_to_ms(recording_ts)
+
     last_recording_ms = get_last_recording(sb, TABLE_DEALS)
 
     if last_recording_ms is None:
@@ -1492,28 +1285,30 @@ def run_deals_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | 
         log.info("Última coleta: %s → modo INCREMENTAL: hs_lastmodifieddate >= %s.",
                  last_dt.isoformat(), last_dt.isoformat())
 
-    log.info("Cutoff fixo da run para Deals: %s.", _ms_to_iso(now_ms))
-
     if window_start >= now_ms:
         log.info("Nada a coletar (window_start >= recording_ts).")
         return [], None
 
-    all_deals, completed = _collect_hubspot_windows_with_retry_point(
-        source="deals",
-        object_label="deals",
-        fetch_window=_fetch_hubspot_deals_window,
-        window_start=window_start,
-        cutoff_ms=now_ms,
-        filter_property=filter_property,
-        recording_ts=recording_ts,
-    )
+    all_deals: list[dict] = []
+    while window_start < now_ms:
+        window_end = min(window_start + 1 * 24 * 3600 * 1000, now_ms)
+        try:
+            batch = _fetch_hubspot_deals_window(
+                window_start, window_end,
+                filter_property=filter_property,
+            )
+        except Exception as exc:
+            log.error(
+                "Timeout/erro na janela %s→%s: %s. Encerrando coleta.",
+                window_start,
+                window_end,
+                exc,
+            )
+            break
 
-    if not completed:
-        raise RetryPointPending(
-            "A coleta de HubSpot Deals ficou incompleta. "
-            "O retry point foi salvo. "
-            "Execute: python dashspy_v2.py deals-resume"
-        )
+        log.info("  Janela %s→%s: %d deals.", window_start, window_end, len(batch))
+        all_deals.extend(batch)
+        window_start = window_end
 
     if not all_deals:
         return [], None
@@ -1523,201 +1318,10 @@ def run_deals_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | 
     log.info("HubSpot Deals: %d deals coletados.", len(rows))
     return rows, path
 
+
 def send_deals(sb: Client, rows: list[dict]) -> None:
     insert_rows(sb, TABLE_DEALS, rows, on_conflict="hs_object_id")
     log.info("=== HubSpot Deals: %d linhas inseridas. ===", len(rows))
-
-
-def _resume_hubspot_collection(
-    *,
-    source: str,
-    object_label: str,
-    fetch_window,
-    process_records,
-) -> tuple[list[dict], str | None]:
-    """
-    Retoma a partir da janela falhada e mantém o cutoff da run original.
-
-    Não consulta novamente o último dt_h_recording_data do Supabase e não
-    calcula um novo horário limite. Se falhar novamente, o mesmo retry point
-    é atualizado para a nova janela falhada.
-    """
-    state = _load_retry_state(source)
-
-    if not state:
-        log.info("Não existe retry point pendente para %s.", object_label)
-        return [], None
-
-    status = state.get("status")
-
-    # A coleta e o processamento já terminaram; falta apenas enviar.
-    if status == "ready_to_send":
-        complete_output_path = state.get("complete_output_path")
-        if not complete_output_path:
-            raise RuntimeError(
-                f"Retry de {object_label} está marcado como ready_to_send, "
-                "mas não possui complete_output_path."
-            )
-
-        output_path = Path(complete_output_path)
-        if not output_path.exists():
-            raise RuntimeError(f"Arquivo final do retry não encontrado: {output_path}")
-
-        rows = _read_json_file(output_path)
-        log.info(
-            "%s: retry já coletado e processado. Arquivo pronto para envio: %s",
-            object_label,
-            output_path,
-        )
-        return rows, str(output_path)
-
-    recording_ts = state["recording_ts"]
-    cutoff_ms = int(state["cutoff_ms"])
-    resume_from_ms = int(state["resume_from_ms"])
-    filter_property = state["filter_property"]
-    partial_raw_path = Path(state["partial_raw_path"])
-
-    if not partial_raw_path.exists():
-        raise RuntimeError(f"Arquivo parcial do retry não encontrado: {partial_raw_path}")
-
-    all_objects = _read_json_file(partial_raw_path)
-    if not isinstance(all_objects, list):
-        raise RuntimeError(f"Arquivo parcial inválido: {partial_raw_path}")
-
-    log.info(
-        "=== Retomando %s === Início=%s (%s); cutoff original=%s (%s); "
-        "recording_ts original=%s; objetos preservados=%d.",
-        object_label,
-        resume_from_ms,
-        _ms_to_iso(resume_from_ms),
-        cutoff_ms,
-        _ms_to_iso(cutoff_ms),
-        recording_ts,
-        len(all_objects),
-    )
-
-    if status == "pending_collection":
-        all_objects, completed = _collect_hubspot_windows_with_retry_point(
-            source=source,
-            object_label=object_label,
-            fetch_window=fetch_window,
-            window_start=resume_from_ms,
-            cutoff_ms=cutoff_ms,
-            filter_property=filter_property,
-            recording_ts=recording_ts,
-            existing_objects=all_objects,
-        )
-
-        if not completed:
-            raise RetryPointPending(
-                f"O retry de {object_label} falhou novamente. "
-                "O retry point foi atualizado para a nova janela."
-            )
-
-        _write_json_atomic(partial_raw_path, all_objects)
-        state.update({
-            "status": "collected",
-            "resume_from_ms": cutoff_ms,
-            "failed_window_end_ms": None,
-            "last_error": None,
-        })
-        _save_retry_state(source, state)
-
-    elif status != "collected":
-        raise RuntimeError(f"Status de retry desconhecido para {source}: {status}")
-
-    # Mantém o recording_ts da run original.
-    rows = process_records(all_objects, recording_ts)
-    output_path = save_temp(f"{source}_retry_complete", rows, recording_ts)
-
-    state.update({
-        "status": "ready_to_send",
-        "complete_output_path": output_path,
-    })
-    _save_retry_state(source, state)
-
-    log.info(
-        "%s: retry concluído até o cutoff original %s. "
-        "%d registros prontos para envio.",
-        object_label,
-        _ms_to_iso(cutoff_ms),
-        len(rows),
-    )
-
-    return rows, output_path
-
-
-def resume_hubspot_contacts() -> tuple[list[dict], str | None]:
-    return _resume_hubspot_collection(
-        source="hubspot",
-        object_label="HubSpot Contacts",
-        fetch_window=_fetch_hubspot_contacts_window,
-        process_records=process_hubspot_records,
-    )
-
-
-def resume_hubspot_deals() -> tuple[list[dict], str | None]:
-    return _resume_hubspot_collection(
-        source="deals",
-        object_label="HubSpot Deals",
-        fetch_window=_fetch_hubspot_deals_window,
-        process_records=process_deal_records,
-    )
-
-
-def run_hubspot_all() -> None:
-    """Coleta Contacts e Deals usando exatamente o mesmo cutoff da run."""
-    recording_ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S UTC")
-    log.info(
-        "Coleta conjunta HubSpot iniciada — cutoff compartilhado: %s",
-        recording_ts,
-    )
-
-    sb = get_supabase_client()
-    pipelines = [
-        ("hubspot", "HubSpot Contacts", run_hubspot_collect, send_hubspot),
-        ("deals", "HubSpot Deals", run_deals_collect, send_deals),
-    ]
-
-    coletados: dict[str, tuple[str, list[dict], str, object]] = {}
-
-    # Primeiro coleta os dois; nenhum envio acontece antes de ambas as tentativas.
-    for source, nome, fn_collect, fn_send in pipelines:
-        try:
-            rows, path = fn_collect(sb, recording_ts)
-        except RetryPointPending as exc:
-            log.error("%s não foi concluído: %s", nome, exc)
-            continue
-        except Exception as exc:
-            log.error("Coleta [%s] falhou: %s", nome, exc, exc_info=True)
-            continue
-
-        if not rows or not path:
-            log.info("%s: nenhum dado novo.", nome)
-            continue
-
-        coletados[source] = (nome, rows, path, fn_send)
-
-    if not coletados:
-        log.warning("Contacts e Deals não retornaram dados completos para envio.")
-        return
-
-    for source, (nome, rows, path, fn_send) in coletados.items():
-        if not aguardar_confirmacao(nome, path):
-            log.warning("Envio de %s cancelado. Arquivo mantido em: %s", nome, path)
-            continue
-
-        try:
-            fn_send(sb, rows)
-            log.info("%s enviado com sucesso.", nome)
-        except Exception as exc:
-            log.error("Envio [%s] falhou: %s", nome, exc, exc_info=True)
-
-    log.info(
-        "Coleta conjunta HubSpot finalizada. "
-        "Cutoff utilizado por Contacts e Deals: %s",
-        recording_ts,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1748,8 +1352,6 @@ def main() -> None:
                 coletados[key] = (nome, rows, path, fn_send)
             else:
                 log.info("%s: nenhum dado novo. Pulando.", nome)
-        except RetryPointPending as exc:
-            log.error("Coleta [%s] interrompida: %s", nome, exc)
         except Exception as exc:
             log.error("Coleta [%s] falhou: %s", nome, exc, exc_info=True)
 
@@ -1872,21 +1474,6 @@ if __name__ == "__main__":
         "deals":    ("HubSpot Deals", run_deals_collect,    send_deals),
     }
 
-    _RETRY_PIPELINES = {
-        "hubspot-resume": (
-            "hubspot",
-            "HubSpot Contacts",
-            resume_hubspot_contacts,
-            send_hubspot,
-        ),
-        "deals-resume": (
-            "deals",
-            "HubSpot Deals",
-            resume_hubspot_deals,
-            send_deals,
-        ),
-    }
-
     _cmd = sys.argv[1] if len(sys.argv) > 1 else None
 
     if _cmd is None:
@@ -1985,40 +1572,6 @@ if __name__ == "__main__":
         except Exception as _exc:
             log.error("Envio [Meta Ads] falhou: %s", _exc, exc_info=True)
             sys.exit(1)
-    elif _cmd == "hubspot-all":
-        run_hubspot_all()
-    elif _cmd in _RETRY_PIPELINES:
-        _source, _nome, _fn_resume, _fn_send = _RETRY_PIPELINES[_cmd]
-
-        try:
-            _rows, _path = _fn_resume()
-        except RetryPointPending as _exc:
-            log.error("%s", _exc)
-            sys.exit(1)
-        except Exception as _exc:
-            log.error("Retry [%s] falhou: %s", _nome, _exc, exc_info=True)
-            sys.exit(1)
-
-        if not _rows:
-            log.info("%s: nenhum retry pendente ou nenhum registro.", _nome)
-            sys.exit(0)
-
-        if not aguardar_confirmacao(f"{_nome} — retry completo", _path):
-            log.warning(
-                "Envio do retry de %s cancelado. O retry point foi mantido.",
-                _nome,
-            )
-            sys.exit(0)
-
-        _sb = get_supabase_client()
-        try:
-            _fn_send(_sb, _rows)
-        except Exception as _exc:
-            log.error("Envio do retry [%s] falhou: %s", _nome, _exc, exc_info=True)
-            sys.exit(1)
-
-        _clear_retry_state(_source)
-        log.info("%s: retry enviado com sucesso.", _nome)
     elif _cmd in _PIPELINES:
         _nome, _fn_collect, _fn_send = _PIPELINES[_cmd]
         _recording_ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S UTC")
@@ -2026,9 +1579,6 @@ if __name__ == "__main__":
         _sb = get_supabase_client()
         try:
             _rows, _path = _fn_collect(_sb, _recording_ts)
-        except RetryPointPending as _exc:
-            log.error("Coleta [%s] interrompida: %s", _nome, _exc)
-            sys.exit(1)
         except Exception as _exc:
             log.error("Coleta [%s] falhou: %s", _nome, _exc, exc_info=True)
             sys.exit(1)
@@ -2046,9 +1596,5 @@ if __name__ == "__main__":
             sys.exit(1)
     else:
         print(f"Subcomando desconhecido: '{_cmd}'")
-        print(
-            "Uso: python dashspy_v2.py "
-            "[meta|meta-resume|google|linkedin|hubspot|deals|hubspot-all|"
-            "hubspot-resume|deals-resume|--retry]"
-        )
+        print("Uso: python dashspy_v2.py [meta|meta-resume|google|linkedin|hubspot|deals|--retry]")
         sys.exit(1)
