@@ -94,11 +94,124 @@ DAY_MS = 24 * 60 * 60 * 1000
 
 HUBSPOT_WINDOW_MAX_RETRIES = 3
 HUBSPOT_WINDOW_RETRY_WAIT = 10
+HUBSPOT_SEARCH_RESULT_LIMIT = 10_000
+HUBSPOT_MIN_WINDOW_MS = 1
+DASHSPY_BUILD = "2026-07-06-adaptive-v3"
 
 
 class RetryPointPending(RuntimeError):
     """Indica que uma coleta ficou incompleta e possui um retry point salvo."""
 
+
+class HubSpotSearchLimitError(RuntimeError):
+    """Indica que uma janela ultrapassou o limite de 10.000 resultados da Search API."""
+
+    def __init__(
+        self,
+        object_label: str,
+        since_ms: int,
+        until_ms: int,
+        after: str | int | None = None,
+        total: int | None = None,
+    ) -> None:
+        self.object_label = object_label
+        self.since_ms = since_ms
+        self.until_ms = until_ms
+        self.after = after
+        self.total = total
+
+        details = []
+        if total is not None:
+            details.append(f"total={total}")
+        if after is not None:
+            details.append(f"after={after}")
+
+        suffix = f" ({', '.join(details)})" if details else ""
+        super().__init__(
+            f"{object_label}: janela {since_ms}→{until_ms} ultrapassou "
+            f"o limite de {HUBSPOT_SEARCH_RESULT_LIMIT} resultados{suffix}."
+        )
+
+
+def _is_hubspot_search_limit_exception(exc: Exception) -> bool:
+    """
+    Detecta o limite de 10.000 mesmo se, por algum motivo, ele chegar ao
+    coletor como requests.HTTPError em vez de HubSpotSearchLimitError.
+    """
+    if isinstance(exc, HubSpotSearchLimitError):
+        return True
+
+    if not isinstance(exc, requests.HTTPError):
+        return False
+
+    response = getattr(exc, "response", None)
+    if response is None or response.status_code != 400:
+        return False
+
+    request = getattr(response, "request", None)
+    body = getattr(request, "body", None)
+
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", errors="replace")
+
+    try:
+        payload = json.loads(body) if isinstance(body, str) and body else {}
+    except (TypeError, ValueError):
+        payload = {}
+
+    after = payload.get("after")
+    try:
+        return after is not None and int(after) >= HUBSPOT_SEARCH_RESULT_LIMIT
+    except (TypeError, ValueError):
+        return False
+
+
+def _split_hubspot_window(
+    *,
+    object_label: str,
+    current_start: int,
+    current_end: int,
+    windows: list[list[int]],
+) -> bool:
+    """Divide a janela atual ao meio e recoloca as metades no início da fila."""
+    duration_ms = current_end - current_start
+
+    if duration_ms <= HUBSPOT_MIN_WINDOW_MS:
+        log.error(
+            "%s: a janela mínima %s→%s ainda ultrapassa 10.000 resultados. "
+            "Não é possível subdividir mais por tempo.",
+            object_label,
+            current_start,
+            current_end,
+        )
+        return False
+
+    midpoint = current_start + duration_ms // 2
+
+    if midpoint <= current_start or midpoint >= current_end:
+        log.error(
+            "%s: não foi possível subdividir a janela %s→%s.",
+            object_label,
+            current_start,
+            current_end,
+        )
+        return False
+
+    log.warning(
+        "%s: janela %s→%s ultrapassou 10.000 resultados. "
+        "Dividindo em %s→%s e %s→%s.",
+        object_label,
+        current_start,
+        current_end,
+        current_start,
+        midpoint,
+        midpoint,
+        current_end,
+    )
+
+    windows.insert(0, [midpoint, current_end])
+    windows.insert(0, [current_start, midpoint])
+    return True
 
 def _ms_to_iso(timestamp_ms: int) -> str:
     """Converte epoch ms UTC para ISO 8601, apenas para exibição nos logs."""
@@ -834,8 +947,8 @@ def _fetch_hubspot_contacts_window(since_ms: int, until_ms: int,
     - `createdate` (default): pega só contatos criados no intervalo (carga full inicial).
     - `lastmodifieddate`: pega criados + modificados no intervalo (carga incremental).
 
-    A Search API limita a 10.000 resultados por query; janelas menores evitam o limite.
-    Valida count do API vs resultados paginados; re-tenta se faltar algum.
+    Quando a janela ultrapassa 10.000 resultados, levanta
+    HubSpotSearchLimitError para que o coletor externo subdivida a janela.
     """
     url = f"{HUBSPOT_BASE_URL}/contacts/search"
     last_obtained = 0
@@ -862,18 +975,78 @@ def _fetch_hubspot_contacts_window(since_ms: int, until_ms: int,
             if after:
                 payload["after"] = after
 
-            resp = requests.post(url, headers=_hub_headers(), json=payload, timeout=300)
+            resp = requests.post(
+                url,
+                headers=_hub_headers(),
+                json=payload,
+                timeout=300,
+            )
+
+            if not resp.ok:
+                log.error(
+                    "HubSpot Contacts retornou erro.\n"
+                    "  Status: %s\n"
+                    "  Janela: %s → %s\n"
+                    "  Propriedade: %s\n"
+                    "  Cursor after: %s\n"
+                    "  Resposta: %s",
+                    resp.status_code,
+                    since_ms,
+                    until_ms,
+                    filter_property,
+                    after,
+                    resp.text[:3000],
+                )
+
+                try:
+                    after_int = int(after) if after is not None else None
+                except (TypeError, ValueError):
+                    after_int = None
+
+                if resp.status_code == 400 and after_int is not None and after_int >= HUBSPOT_SEARCH_RESULT_LIMIT:
+                    raise HubSpotSearchLimitError(
+                        "Contacts",
+                        since_ms,
+                        until_ms,
+                        after=after,
+                        total=expected_total,
+                    )
+
             resp.raise_for_status()
             data = resp.json()
 
             if expected_total is None:
                 expected_total = int(data.get("total", 0))
 
+                if expected_total > HUBSPOT_SEARCH_RESULT_LIMIT:
+                    raise HubSpotSearchLimitError(
+                        "Contacts",
+                        since_ms,
+                        until_ms,
+                        total=expected_total,
+                    )
+
             results = data.get("results", [])
             all_contacts.extend(results)
 
             paging = data.get("paging", {})
-            after = paging.get("next", {}).get("after") if paging else None
+            next_after = paging.get("next", {}).get("after") if paging else None
+
+            try:
+                next_after_int = int(next_after) if next_after is not None else None
+            except (TypeError, ValueError):
+                next_after_int = None
+
+            if next_after_int is not None and next_after_int >= HUBSPOT_SEARCH_RESULT_LIMIT:
+                raise HubSpotSearchLimitError(
+                    "Contacts",
+                    since_ms,
+                    until_ms,
+                    after=next_after,
+                    total=expected_total,
+                )
+
+            after = next_after
             if not after:
                 break
 
@@ -1112,6 +1285,19 @@ def process_hubspot_records(contacts: list[dict], recording_ts: str) -> list[dic
     return rows
 
 
+def _build_daily_windows(window_start: int, cutoff_ms: int) -> list[list[int]]:
+    """Cria a fila inicial de janelas diárias até o cutoff fixo da run."""
+    windows: list[list[int]] = []
+    current = window_start
+
+    while current < cutoff_ms:
+        window_end = min(current + DAY_MS, cutoff_ms)
+        windows.append([current, window_end])
+        current = window_end
+
+    return windows
+
+
 def _collect_hubspot_windows_with_retry_point(
     *,
     source: str,
@@ -1122,30 +1308,63 @@ def _collect_hubspot_windows_with_retry_point(
     filter_property: str,
     recording_ts: str,
     existing_objects: list[dict] | None = None,
+    pending_windows: list[list[int]] | None = None,
 ) -> tuple[list[dict], bool]:
     """
-    Coleta objetos do HubSpot por janelas e persiste o ponto exato de falha.
+    Coleta objetos do HubSpot por janelas.
 
-    O `cutoff_ms` e o `recording_ts` são sempre os da run original. Em caso
-    de nova falha durante um retry, o checkpoint passa a apontar para essa
-    nova janela, sem alterar o cutoff original.
+    - Janelas que ultrapassam 10.000 resultados são divididas ao meio.
+    - Erros transitórios recebem até HUBSPOT_WINDOW_MAX_RETRIES tentativas.
+    - Em caso de falha persistente, salva a fila exata de janelas restantes.
+    - O cutoff e o recording_ts continuam sendo os da run original.
     """
     all_objects = list(existing_objects or [])
 
-    while window_start < cutoff_ms:
-        window_end = min(window_start + DAY_MS, cutoff_ms)
+    if pending_windows is None:
+        windows = _build_daily_windows(window_start, cutoff_ms)
+    else:
+        windows = [
+            [int(start), int(end)]
+            for start, end in pending_windows
+            if int(start) < int(end) and int(start) < cutoff_ms
+        ]
+
+    while windows:
+        current_start, current_end = windows.pop(0)
+        current_end = min(current_end, cutoff_ms)
+
+        if current_start >= current_end:
+            continue
+
         batch: list[dict] | None = None
         last_exception: Exception | None = None
 
         for attempt in range(1, HUBSPOT_WINDOW_MAX_RETRIES + 1):
             try:
                 batch = fetch_window(
-                    window_start,
-                    window_end,
+                    current_start,
+                    current_end,
                     filter_property=filter_property,
                 )
                 break
+
             except Exception as exc:
+                # O limite de 10.000 não é transitório: repetir a mesma janela
+                # não ajuda. Divide imediatamente, inclusive se o erro chegar
+                # como requests.HTTPError em vez da exceção customizada.
+                if _is_hubspot_search_limit_exception(exc):
+                    if _split_hubspot_window(
+                        object_label=object_label,
+                        current_start=current_start,
+                        current_end=current_end,
+                        windows=windows,
+                    ):
+                        batch = []
+                        last_exception = None
+                    else:
+                        last_exception = exc
+                    break
+
                 last_exception = exc
 
                 if attempt < HUBSPOT_WINDOW_MAX_RETRIES:
@@ -1153,8 +1372,8 @@ def _collect_hubspot_windows_with_retry_point(
                         "%s: erro na janela %s→%s. "
                         "Tentativa %d/%d — aguardando %ss. Erro: %s",
                         object_label,
-                        window_start,
-                        window_end,
+                        current_start,
+                        current_end,
                         attempt,
                         HUBSPOT_WINDOW_MAX_RETRIES,
                         HUBSPOT_WINDOW_RETRY_WAIT,
@@ -1162,7 +1381,12 @@ def _collect_hubspot_windows_with_retry_point(
                     )
                     time.sleep(HUBSPOT_WINDOW_RETRY_WAIT)
 
+        # A janela foi substituída por duas menores; não há lote a adicionar.
+        if batch == [] and last_exception is None:
+            continue
+
         if batch is None:
+            remaining_windows = [[current_start, current_end], *windows]
             partial_raw_path = _retry_raw_path(source, recording_ts)
 
             # Só contém janelas concluídas integralmente.
@@ -1174,8 +1398,9 @@ def _collect_hubspot_windows_with_retry_point(
                     "status": "pending_collection",
                     "recording_ts": recording_ts,
                     "cutoff_ms": cutoff_ms,
-                    "resume_from_ms": window_start,
-                    "failed_window_end_ms": window_end,
+                    "resume_from_ms": current_start,
+                    "failed_window_end_ms": current_end,
+                    "pending_windows": remaining_windows,
                     "filter_property": filter_property,
                     "partial_raw_path": str(partial_raw_path),
                     "complete_output_path": None,
@@ -1186,32 +1411,32 @@ def _collect_hubspot_windows_with_retry_point(
             log.error(
                 "%s: coleta interrompida. "
                 "Retry point=%s (%s); fim da janela=%s (%s); "
-                "cutoff original=%s (%s); objetos preservados=%d.",
+                "cutoff original=%s (%s); objetos preservados=%d; "
+                "janelas pendentes=%d.",
                 object_label,
-                window_start,
-                _ms_to_iso(window_start),
-                window_end,
-                _ms_to_iso(window_end),
+                current_start,
+                _ms_to_iso(current_start),
+                current_end,
+                _ms_to_iso(current_end),
                 cutoff_ms,
                 _ms_to_iso(cutoff_ms),
                 len(all_objects),
+                len(remaining_windows),
             )
 
             return all_objects, False
 
         log.info(
             "  Janela %s→%s: %d %s.",
-            window_start,
-            window_end,
+            current_start,
+            current_end,
             len(batch),
             object_label,
         )
 
         all_objects.extend(batch)
-        window_start = window_end
 
     return all_objects, True
-
 
 def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | None]:
     """
@@ -1390,12 +1615,13 @@ def _fetch_hubspot_deals_window(since_ms: int, until_ms: int,
     """
     Busca deals em uma janela [since_ms, until_ms) usando `filter_property`.
 
-    - `createdate` (default): só deals criados no intervalo (carga full inicial).
-    - `lastmodifieddate`: criados + modificados (carga incremental).
+    Quando a janela ultrapassa 10.000 resultados, levanta
+    HubSpotSearchLimitError para que o coletor externo subdivida a janela.
     """
     url = f"{HUBSPOT_BASE_URL}/deals/search"
     all_deals: list[dict] = []
     after: str | None = None
+    expected_total: int | None = None
 
     while True:
         payload: dict = {
@@ -1411,17 +1637,81 @@ def _fetch_hubspot_deals_window(since_ms: int, until_ms: int,
         if after:
             payload["after"] = after
 
-        resp = requests.post(url, headers=_hub_headers(), json=payload, timeout=300)
+        resp = requests.post(
+            url,
+            headers=_hub_headers(),
+            json=payload,
+            timeout=300,
+        )
+
+        if not resp.ok:
+            log.error(
+                "HubSpot Deals retornou erro.\n"
+                "  Status: %s\n"
+                "  Janela: %s → %s\n"
+                "  Propriedade: %s\n"
+                "  Cursor after: %s\n"
+                "  Resposta: %s",
+                resp.status_code,
+                since_ms,
+                until_ms,
+                filter_property,
+                after,
+                resp.text[:3000],
+            )
+
+            try:
+                after_int = int(after) if after is not None else None
+            except (TypeError, ValueError):
+                after_int = None
+
+            if resp.status_code == 400 and after_int is not None and after_int >= HUBSPOT_SEARCH_RESULT_LIMIT:
+                raise HubSpotSearchLimitError(
+                    "Deals",
+                    since_ms,
+                    until_ms,
+                    after=after,
+                    total=expected_total,
+                )
+
         resp.raise_for_status()
         data = resp.json()
+
+        if expected_total is None:
+            expected_total = int(data.get("total", 0))
+
+            if expected_total > HUBSPOT_SEARCH_RESULT_LIMIT:
+                raise HubSpotSearchLimitError(
+                    "Deals",
+                    since_ms,
+                    until_ms,
+                    total=expected_total,
+                )
+
         all_deals.extend(data.get("results", []))
+
         paging = data.get("paging", {})
-        after = paging.get("next", {}).get("after") if paging else None
+        next_after = paging.get("next", {}).get("after") if paging else None
+
+        try:
+            next_after_int = int(next_after) if next_after is not None else None
+        except (TypeError, ValueError):
+            next_after_int = None
+
+        if next_after_int is not None and next_after_int >= HUBSPOT_SEARCH_RESULT_LIMIT:
+            raise HubSpotSearchLimitError(
+                "Deals",
+                since_ms,
+                until_ms,
+                after=next_after,
+                total=expected_total,
+            )
+
+        after = next_after
         if not after:
             break
 
     return all_deals
-
 
 def process_deal_records(deals: list[dict], recording_ts: str) -> list[dict]:
     """Convierte deals del HubSpot al schema de teste_data_deals_01."""
@@ -1606,6 +1896,7 @@ def _resume_hubspot_collection(
             filter_property=filter_property,
             recording_ts=recording_ts,
             existing_objects=all_objects,
+            pending_windows=state.get("pending_windows"),
         )
 
         if not completed:
@@ -1619,6 +1910,7 @@ def _resume_hubspot_collection(
             "status": "collected",
             "resume_from_ms": cutoff_ms,
             "failed_window_end_ms": None,
+            "pending_windows": [],
             "last_error": None,
         })
         _save_retry_state(source, state)
@@ -1863,6 +2155,12 @@ def retry_from_outputs() -> None:
 
 if __name__ == "__main__":
     import sys
+
+    log.info(
+        "Código carregado — build=%s — arquivo=%s",
+        DASHSPY_BUILD,
+        Path(__file__).resolve(),
+    )
 
     _PIPELINES = {
         "meta":     ("Meta Ads",      run_meta_collect,     send_meta),
