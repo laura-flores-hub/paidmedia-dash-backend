@@ -2096,7 +2096,7 @@ def retry_from_outputs() -> None:
     """Carrega arquivos JSON de outputs/ e reenvia para o Supabase sem re-coletar."""
     from pathlib import Path
 
-    output_dir = Path("outputs")
+    output_dir = Path(PATH_OUTPUTS_M)
     if not output_dir.exists():
         log.error("Diretório outputs/ não encontrado.")
         return
