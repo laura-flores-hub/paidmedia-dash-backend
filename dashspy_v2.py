@@ -20,13 +20,13 @@ from pathlib import Path
 # Configuração de logging
 # ---------------------------------------------------------------------------
 
-LOG_DIR = Path(__file__).resolve().parent / "logs"
+LOG_DIR = Path(__file__).resolve().parent / "logs/dashspy"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / f"dashspy_{os.getpid()}.log"
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(message)s",
+    format="%(asctime)s | %(levelname)s | %(message)s",
     datefmt="%H:%M:%S",
     handlers=[
         RichHandler(rich_tracebacks=True, markup=True),
@@ -1813,9 +1813,36 @@ def run_deals_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | 
     log.info("HubSpot Deals: %d deals coletados.", len(rows))
     return rows, path
 
+# modifiquei isso aqui para remover duplicadas antes de enviar, mas talvez seja melhor adicionar um limite de "até 10min antes" nas execuções do hub
+
 def send_deals(sb: Client, rows: list[dict]) -> None:
-    insert_rows(sb, TABLE_DEALS, rows, on_conflict="hs_object_id")
-    log.info("=== HubSpot Deals: %d linhas inseridas. ===", len(rows))
+    deduplicated = {
+        str(row["hs_object_id"]): row
+        for row in rows
+        if row.get("hs_object_id")
+    }
+
+    clean_rows = list(deduplicated.values())
+
+    removed = len(rows) - len(clean_rows)
+
+    if removed:
+        log.warning(
+            "HubSpot Deals: %d registros duplicados por hs_object_id removidos antes do envio.",
+            removed,
+        )
+
+    insert_rows(
+        sb,
+        TABLE_DEALS,
+        clean_rows,
+        on_conflict="hs_object_id",
+    )
+
+    log.info(
+        "=== HubSpot Deals: %d linhas únicas inseridas/atualizadas. ===",
+        len(clean_rows),
+    )
 
 
 def _resume_hubspot_collection(

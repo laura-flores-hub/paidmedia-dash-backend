@@ -39,16 +39,35 @@ import hashlib
 import json
 import os
 import sys
+import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 from urllib.parse import parse_qs
+from rich.logging import RichHandler
 
 
 # -----------------------------------------------------------------------------
 # CONFIGURAÇÃO
 # -----------------------------------------------------------------------------
+
+LOG_DIR = Path(__file__).resolve().parent / "logs/consolidate_forms"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / f"consolidate_forms_{os.getpid()}.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S",
+    handlers=[
+        RichHandler(rich_tracebacks=True, markup=True),
+        logging.FileHandler(LOG_FILE, mode="w", encoding="utf-8")
+    ]
+)
+
+log = logging.getLogger(__name__)
+
 OUTPUT_DIR = Path(
     "hubspot_eventos"
 )
@@ -617,6 +636,82 @@ def overall_match_confidence(
 # -----------------------------------------------------------------------------
 # CONSTRUÇÃO DA LINHA CONSOLIDADA
 # -----------------------------------------------------------------------------
+
+def has_ad_attribution(
+    utm_source: Any,
+    utm_medium: Any,
+    hsa_acc: Any,
+    hsa_cam: Any,
+    hsa_grp: Any,
+    hsa_ad: Any,
+    hsa_src: Any,
+) -> bool:
+    def normalize(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+
+        text = str(value).strip().lower()
+        return text or None
+
+    source = normalize(utm_source)
+    medium = normalize(utm_medium)
+
+    paid_mediums = {
+        "cpc",
+        "ppc",
+        "paid",
+        "paid_social",
+        "paid-social",
+        "paid_search",
+        "paid-search",
+        "display",
+        "remarketing",
+        "retargeting",
+    }
+
+    paid_sources = {
+        "google",
+        "google ads",
+        "googleads",
+        "adwords",
+        "facebook",
+        "facebook ads",
+        "instagram",
+        "meta",
+        "linkedin",
+        "linkedin ads",
+        "bing",
+        "microsoft ads",
+    }
+
+    has_hsa = any(
+        value is not None and str(value).strip()
+        for value in (
+            hsa_acc,
+            hsa_cam,
+            hsa_grp,
+            hsa_ad,
+            hsa_src,
+        )
+    )
+
+    has_paid_utm = (
+        medium in paid_mediums
+        or (
+            source in paid_sources
+            and medium not in {
+                None,
+                "organic",
+                "referral",
+                "email",
+                "direct",
+                "none",
+            }
+        )
+    )
+
+    return bool(has_hsa or has_paid_utm)
+
 def build_consolidated_row(
     base_event: dict[str, Any],
     submitted_event: Optional[dict[str, Any]],
@@ -654,6 +749,33 @@ def build_consolidated_row(
     )
 
     window = manifest["window"]
+
+    utm_source = first_nonempty(
+    base_properties.get("hs_utm_source"),
+    submitted_properties.get("hs_utm_source"),
+    metadata_properties.get("hs_utm_source"),
+    query_attribution.get("utm_source"),
+    )
+
+    utm_medium = first_nonempty(
+        base_properties.get("hs_utm_medium"),
+        submitted_properties.get("hs_utm_medium"),
+        metadata_properties.get("hs_utm_medium"),
+        query_attribution.get("utm_medium"),
+    )
+
+    utm_campaign = first_nonempty(
+        base_properties.get("hs_utm_campaign"),
+        submitted_properties.get("hs_utm_campaign"),
+        metadata_properties.get("hs_utm_campaign"),
+        query_attribution.get("utm_campaign"),
+    )
+
+    hsa_acc = query_attribution.get("hsa_acc")
+    hsa_cam = query_attribution.get("hsa_cam")
+    hsa_grp = query_attribution.get("hsa_grp")
+    hsa_ad = query_attribution.get("hsa_ad")
+    hsa_src = query_attribution.get("hsa_src")
 
     return {
         # Identificação principal
@@ -704,32 +826,49 @@ def build_consolidated_row(
         ),
         "query_params": query_params,
         # UTMs e atribuição de anúncios
-        "utm_source": first_nonempty(
-            base_properties.get("hs_utm_source"),
-            submitted_properties.get("hs_utm_source"),
-            metadata_properties.get("hs_utm_source"),
-            query_attribution.get("utm_source"),
-        ),
-        "utm_medium": first_nonempty(
-            base_properties.get("hs_utm_medium"),
-            submitted_properties.get("hs_utm_medium"),
-            metadata_properties.get("hs_utm_medium"),
-            query_attribution.get("utm_medium"),
-        ),
-        "utm_campaign": first_nonempty(
-            base_properties.get("hs_utm_campaign"),
-            submitted_properties.get("hs_utm_campaign"),
-            metadata_properties.get("hs_utm_campaign"),
-            query_attribution.get("utm_campaign"),
-        ),
+        #"utm_source": first_nonempty(
+        #    base_properties.get("hs_utm_source"),
+        #    submitted_properties.get("hs_utm_source"),
+        #    metadata_properties.get("hs_utm_source"),
+        #    query_attribution.get("utm_source"),
+        #),
+        "utm_source": utm_source,
+        #"utm_medium": first_nonempty(
+        #    base_properties.get("hs_utm_medium"),
+        #    submitted_properties.get("hs_utm_medium"),
+        #    metadata_properties.get("hs_utm_medium"),
+        #    query_attribution.get("utm_medium"),
+        #),
+        "utm_medium": utm_medium,
+        #"utm_campaign": first_nonempty(
+        #    base_properties.get("hs_utm_campaign"),
+        #    submitted_properties.get("hs_utm_campaign"),
+        #    metadata_properties.get("hs_utm_campaign"),
+        #    query_attribution.get("utm_campaign"),
+        #),
+        "utm_campaign": utm_campaign,
         "utm_term": query_attribution.get("utm_term"),
         "utm_content": query_attribution.get("utm_content"),
-        "hsa_acc": query_attribution.get("hsa_acc"),
-        "hsa_cam": query_attribution.get("hsa_cam"),
-        "hsa_grp": query_attribution.get("hsa_grp"),
-        "hsa_ad": query_attribution.get("hsa_ad"),
-        "hsa_src": query_attribution.get("hsa_src"),
-        "has_ad_attribution": bool(query_attribution.get("hsa_cam")),
+        #"hsa_acc": query_attribution.get("hsa_acc"),
+        "hsa_acc": hsa_acc,
+        #"hsa_cam": query_attribution.get("hsa_cam"),
+        "hsa_cam": hsa_cam,
+        #"hsa_grp": query_attribution.get("hsa_grp"),
+        "hsa_grp": hsa_grp,
+        #"hsa_ad": query_attribution.get("hsa_ad"),
+        "hsa_ad": hsa_ad,
+        #"hsa_src": query_attribution.get("hsa_src"),
+        "hsa_src": hsa_src,
+        #"has_ad_attribution": bool(query_attribution.get("hsa_cam")),
+        "has_ad_attribution": has_ad_attribution(
+            utm_source=utm_source,
+            utm_medium=utm_medium,
+            hsa_acc=hsa_acc,
+            hsa_cam=hsa_cam,
+            hsa_grp=hsa_grp,
+            hsa_ad=hsa_ad,
+            hsa_src=hsa_src,
+        ),
         # Rastreabilidade dos eventos de origem
         "v2_event_id": event_id(base_event),
         "submitted_form_event_id": event_id(submitted_event),

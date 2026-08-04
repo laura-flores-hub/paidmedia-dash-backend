@@ -39,14 +39,31 @@ import json
 import os
 import sys
 import time
+import logging
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
+from rich.logging import RichHandler
 
 import requests
 from dotenv import load_dotenv
 
+LOG_DIR = Path(__file__).resolve().parent / "logs/hubspot_eventos"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / f"hubspot_eventos_{os.getpid()}.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S",
+    handlers=[
+        RichHandler(rich_tracebacks=True, markup=True),
+        logging.FileHandler(LOG_FILE, mode="w", encoding="utf-8")
+    ]
+)
+
+log = logging.getLogger(__name__)
 
 load_dotenv()
 
