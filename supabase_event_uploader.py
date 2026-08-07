@@ -43,7 +43,10 @@ from supabase import Client, create_client
 load_dotenv()
 
 TABLE_ADS = "data_hs_ad_interactions_v2"
-TABLE_PAGES = "data_hs_page_views_v2"
+# BLOQUEADO: envio de page views (e_visited_page) para o Supabase desativado
+# de propósito — esses arquivos devem ficar só locais. Para reativar,
+# descomente esta linha e os demais trechos marcados como "BLOQUEADO" abaixo.
+# TABLE_PAGES = "data_hs_page_views_v2"
 TABLE_FORMS = "data_hs_form_submissions_v2"
 DEFAULT_BATCH_SIZE = 500
 
@@ -303,7 +306,7 @@ def upload_jsonl(
     batch_size: int,
     dry_run: bool,
     assume_yes: bool,
-) -> None:
+) -> dict[str, Any]:
     input_path = input_path.expanduser().resolve()
     if not input_path.is_file():
         raise FileNotFoundError(f"Arquivo não encontrado: {input_path}")
@@ -349,19 +352,34 @@ def upload_jsonl(
     if rejected_path:
         print(f"Arquivo de rejeitadas: {rejected_path}")
 
+    summary: dict[str, Any] = {
+        "input_path": str(input_path),
+        "table": table,
+        "lines_read": total,
+        "valid_rows": len(valid),
+        "duplicated_in_file": duplicated_in_file,
+        "rejected_rows": len(rejected),
+        "rejected_path": str(rejected_path) if rejected_path else None,
+        "sent_rows": 0,
+        "status": "pending",
+    }
+
     if dry_run:
         print("\nDRY RUN: nenhuma linha foi enviada.")
-        return
+        summary["status"] = "dry_run"
+        return summary
 
     if not valid:
         print("\nNenhuma linha válida para enviar.")
-        return
+        summary["status"] = "no_valid_rows"
+        return summary
 
     if not assume_yes:
         answer = input(f"\nEnviar {len(valid)} linha(s) para {table}? [s/N]: ").strip().lower()
         if answer not in {"s", "sim", "y", "yes"}:
             print("Envio cancelado.")
-            return
+            summary["status"] = "cancelled"
+            return summary
 
     sb = get_supabase_client()
     processed = 0
@@ -372,6 +390,9 @@ def upload_jsonl(
         print(f"Processadas {processed}/{len(valid)} linha(s) em {table}.")
 
     print("Concluído. Linhas existentes foram ignoradas e não alteradas.")
+    summary["sent_rows"] = processed
+    summary["status"] = "sent"
+    return summary
 
 
 def upload_ads(path: Path, args: argparse.Namespace) -> None:
@@ -388,18 +409,19 @@ def upload_ads(path: Path, args: argparse.Namespace) -> None:
     )
 
 
-def upload_pages(path: Path, args: argparse.Namespace) -> None:
-    upload_jsonl(
-        input_path=path,
-        table=TABLE_PAGES,
-        on_conflict="event_id",
-        transform=prepare_page_row,
-        conflict_key=lambda row: (row["event_id"],),
-        required_fields=("event_id", "contact_id", "viewed_at", "extracted_at"),
-        batch_size=args.batch_size,
-        dry_run=args.dry_run,
-        assume_yes=args.yes,
-    )
+# BLOQUEADO: envio de page views para o Supabase desativado de propósito.
+# def upload_pages(path: Path, args: argparse.Namespace) -> None:
+#     upload_jsonl(
+#         input_path=path,
+#         table=TABLE_PAGES,
+#         on_conflict="event_id",
+#         transform=prepare_page_row,
+#         conflict_key=lambda row: (row["event_id"],),
+#         required_fields=("event_id", "contact_id", "viewed_at", "extracted_at"),
+#         batch_size=args.batch_size,
+#         dry_run=args.dry_run,
+#         assume_yes=args.yes,
+#     )
 
 
 def upload_forms(path: Path, args: argparse.Namespace) -> None:
@@ -430,7 +452,8 @@ def parse_args() -> argparse.Namespace:
 
     for command, help_text in (
         ("ads", "Envia e_ad_interaction."),
-        ("pages", "Envia e_visited_page."),
+        # BLOQUEADO: envio de page views para o Supabase desativado de propósito.
+        # ("pages", "Envia e_visited_page."),
         ("forms", "Envia forms_consolidated_v1."),
     ):
         subparser = subparsers.add_parser(command, help=help_text)
@@ -439,7 +462,8 @@ def parse_args() -> argparse.Namespace:
 
     all_parser = subparsers.add_parser("all", help="Envia os três arquivos.")
     all_parser.add_argument("--ads", required=True, type=Path)
-    all_parser.add_argument("--pages", required=True, type=Path)
+    # BLOQUEADO: envio de page views para o Supabase desativado de propósito.
+    # all_parser.add_argument("--pages", required=True, type=Path)
     all_parser.add_argument("--forms", required=True, type=Path)
     add_common_arguments(all_parser)
 
@@ -453,13 +477,15 @@ def main() -> None:
 
     if args.command == "ads":
         upload_ads(args.file, args)
-    elif args.command == "pages":
-        upload_pages(args.file, args)
+    # BLOQUEADO: envio de page views para o Supabase desativado de propósito.
+    # elif args.command == "pages":
+    #     upload_pages(args.file, args)
     elif args.command == "forms":
         upload_forms(args.file, args)
     elif args.command == "all":
         upload_ads(args.ads, args)
-        upload_pages(args.pages, args)
+        # BLOQUEADO: envio de page views para o Supabase desativado de propósito.
+        # upload_pages(args.pages, args)
         upload_forms(args.forms, args)
 
 

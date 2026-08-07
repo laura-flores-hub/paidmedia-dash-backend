@@ -637,80 +637,80 @@ def overall_match_confidence(
 # CONSTRUÇÃO DA LINHA CONSOLIDADA
 # -----------------------------------------------------------------------------
 
-def has_ad_attribution(
-    utm_source: Any,
-    utm_medium: Any,
-    hsa_acc: Any,
-    hsa_cam: Any,
-    hsa_grp: Any,
-    hsa_ad: Any,
-    hsa_src: Any,
-) -> bool:
-    def normalize(value: Any) -> Optional[str]:
-        if value is None:
-            return None
-
-        text = str(value).strip().lower()
-        return text or None
-
-    source = normalize(utm_source)
-    medium = normalize(utm_medium)
-
-    paid_mediums = {
-        "cpc",
-        "ppc",
-        "paid",
-        "paid_social",
-        "paid-social",
-        "paid_search",
-        "paid-search",
-        "display",
-        "remarketing",
-        "retargeting",
-    }
-
-    paid_sources = {
-        "google",
-        "google ads",
-        "googleads",
-        "adwords",
-        "facebook",
-        "facebook ads",
-        "instagram",
-        "meta",
-        "linkedin",
-        "linkedin ads",
-        "bing",
-        "microsoft ads",
-    }
-
-    has_hsa = any(
-        value is not None and str(value).strip()
-        for value in (
-            hsa_acc,
-            hsa_cam,
-            hsa_grp,
-            hsa_ad,
-            hsa_src,
-        )
-    )
-
-    has_paid_utm = (
-        medium in paid_mediums
-        or (
-            source in paid_sources
-            and medium not in {
-                None,
-                "organic",
-                "referral",
-                "email",
-                "direct",
-                "none",
-            }
-        )
-    )
-
-    return bool(has_hsa or has_paid_utm)
+# def has_ad_attribution(
+#     utm_source: Any,
+#     utm_medium: Any,
+#     hsa_acc: Any,
+#     hsa_cam: Any,
+#     hsa_grp: Any,
+#     hsa_ad: Any,
+#     hsa_src: Any,
+# ) -> bool:
+#     def normalize(value: Any) -> Optional[str]:
+#         if value is None:
+#             return None
+#
+#         text = str(value).strip().lower()
+#         return text or None
+#
+#     source = normalize(utm_source)
+#     medium = normalize(utm_medium)
+#
+#     paid_mediums = {
+#         "cpc",
+#         "ppc",
+#         "paid",
+#         "paid_social",
+#         "paid-social",
+#         "paid_search",
+#         "paid-search",
+#         "display",
+#         "remarketing",
+#         "retargeting",
+#     }
+#
+#     paid_sources = {
+#         "google",
+#         "google ads",
+#         "googleads",
+#         "adwords",
+#         "facebook",
+#         "facebook ads",
+#         "instagram",
+#         "meta",
+#         "linkedin",
+#         "linkedin ads",
+#         "bing",
+#         "microsoft ads",
+#     }
+#
+#     has_hsa = any(
+#         value is not None and str(value).strip()
+#         for value in (
+#             hsa_acc,
+#             hsa_cam,
+#             hsa_grp,
+#             hsa_ad,
+#             hsa_src,
+#         )
+#     )
+#
+#     has_paid_utm = (
+#         medium in paid_mediums
+#         or (
+#             source in paid_sources
+#             and medium not in {
+#                 None,
+#                 "organic",
+#                 "referral",
+#                 "email",
+#                 "direct",
+#                 "none",
+#             }
+#         )
+#     )
+#
+#     return bool(has_hsa or has_paid_utm)
 
 def build_consolidated_row(
     base_event: dict[str, Any],
@@ -860,15 +860,15 @@ def build_consolidated_row(
         #"hsa_src": query_attribution.get("hsa_src"),
         "hsa_src": hsa_src,
         #"has_ad_attribution": bool(query_attribution.get("hsa_cam")),
-        "has_ad_attribution": has_ad_attribution(
-            utm_source=utm_source,
-            utm_medium=utm_medium,
-            hsa_acc=hsa_acc,
-            hsa_cam=hsa_cam,
-            hsa_grp=hsa_grp,
-            hsa_ad=hsa_ad,
-            hsa_src=hsa_src,
-        ),
+        # "has_ad_attribution": has_ad_attribution(
+        #     utm_source=utm_source,
+        #     utm_medium=utm_medium,
+        #     hsa_acc=hsa_acc,
+        #     hsa_cam=hsa_cam,
+        #     hsa_grp=hsa_grp,
+        #     hsa_ad=hsa_ad,
+        #     hsa_src=hsa_src,
+        # ),
         # Rastreabilidade dos eventos de origem
         "v2_event_id": event_id(base_event),
         "submitted_form_event_id": event_id(submitted_event),
@@ -1331,6 +1331,63 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def consolidate_all_ready(
+    output_dir: Path = OUTPUT_DIR,
+    force: bool = False,
+    match_window_seconds: int = DEFAULT_MATCH_WINDOW_SECONDS,
+    boundary_lookaround_seconds: int = DEFAULT_BOUNDARY_LOOKAROUND_SECONDS,
+) -> dict[str, Any]:
+    """Entrada não-interativa usada pelo main.py orquestrador.
+
+    Equivalente a `--all-ready`, mas retorna um resumo estruturado
+    (run_ids processados, sucesso/erro de cada um) em vez de só imprimir.
+    """
+    output_dir = output_dir.expanduser().resolve()
+    runs_dir = output_dir / RUNS_DIR_NAME
+    consolidated_dir = output_dir / CONSOLIDATED_DIR_NAME
+
+    if not runs_dir.exists():
+        raise SystemExit(f"Pasta de manifestos não encontrada: {runs_dir}")
+
+    consolidated_dir.mkdir(parents=True, exist_ok=True)
+    all_manifests = discover_manifests(runs_dir)
+    ready_manifests = [
+        item for item in all_manifests if manifest_ready_for_forms(item[1])
+    ]
+
+    selected = [
+        item
+        for item in ready_manifests
+        if force
+        or not report_exists_for_run(consolidated_dir, str(item[1].get("run_id")))
+    ]
+
+    processed: list[dict[str, Any]] = []
+
+    for manifest_path, manifest in selected:
+        run_id = str(manifest.get("run_id", manifest_path.stem))
+        try:
+            consolidate_manifest(
+                manifest_path=manifest_path,
+                manifest=manifest,
+                all_manifests=all_manifests,
+                consolidated_dir=consolidated_dir,
+                match_window_seconds=match_window_seconds,
+                boundary_lookaround_seconds=boundary_lookaround_seconds,
+                force=force,
+            )
+            processed.append({"run_id": run_id, "status": "success"})
+        except Exception as exc:
+            processed.append({"run_id": run_id, "status": "error", "error": str(exc)})
+
+    return {
+        "ready_manifests_found": len(ready_manifests),
+        "selected_for_processing": len(selected),
+        "processed": processed,
+        "failures": sum(1 for p in processed if p["status"] == "error"),
+    }
+
+
 def main() -> None:
     args = parse_args()
 
@@ -1420,3 +1477,9 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nConsolidação interrompida pelo usuário.")
         sys.exit(130)
+
+# 2026-08-04: comentado o cálculo de has_ad_attribution (função e campo no
+# row consolidado). Critério ficou desatualizado em relação ao usado por
+# consolidate_conversions_forms_localsrc.py, que ignora esse valor e
+# recalcula a atribuição do zero a partir dos campos brutos (UTMs/hsa_*).
+# Manter o cálculo aqui era redundante e enganoso.

@@ -1102,9 +1102,10 @@ def create_daily_run(
     state_path: Path,
     runs_dir: Path,
     output_dir: Path,
+    occurred_before_override: str | None = None,
 ) -> Path:
     occurred_after = state["daily_next_after"]
-    occurred_before = to_utc_iso_seconds(utc_now_seconds())
+    occurred_before = occurred_before_override or to_utc_iso_seconds(utc_now_seconds())
 
     if parse_iso_utc(occurred_after) >= parse_iso_utc(occurred_before):
         raise SystemExit(
@@ -1176,6 +1177,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="No modo retry, retoma todas as runs incompletas sem perguntar.",
     )
+    parser.add_argument(
+        "--cutoff-ts",
+        help=(
+            "Sobrescreve o occurred_before da run diária (ISO-8601 UTC, ex: "
+            "2026-08-04T15:30:00Z). Usado pelo orquestrador para compartilhar "
+            "o mesmo corte entre contacts/deals/events."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1208,6 +1217,7 @@ def main() -> None:
             state_path=state_path,
             runs_dir=runs_dir,
             output_dir=output_dir,
+            occurred_before_override=args.cutoff_ts,
         )
         process_manifest(
             manifest_path=manifest_path,
@@ -1241,6 +1251,111 @@ def main() -> None:
                 manifest_path=manifest_path,
                 allow_terminal_retry=interactive,
             )
+
+
+def _summarize_manifest(manifest: dict[str, Any], manifest_path: Path) -> dict[str, Any]:
+    return {
+        "run_id": manifest.get("run_id"),
+        "status": manifest.get("status"),
+        "window": manifest.get("window"),
+        "manifest_path": str(manifest_path),
+        "event_types": {
+            event_type: {
+                "status": item.get("status"),
+                "total_events": item.get("total_events"),
+                "output_file": item.get("output_file"),
+                "last_error": item.get("last_error"),
+            }
+            for event_type, item in manifest.get("event_types", {}).items()
+        },
+    }
+
+
+def retry_incomplete_manifests() -> list[dict[str, Any]]:
+    """Reprocessa (sem prompts) todos os manifestos incompletos existentes,
+    sem criar nenhuma run nova. Usado pelo main.py para tentativas extras
+    de retry sobre uma run que já foi criada numa tentativa anterior."""
+    output_dir = OUTPUT_DIR.expanduser().resolve()
+    runs_dir = output_dir / RUNS_DIR_NAME
+    summaries = []
+    for manifest_path in list_incomplete_manifests(runs_dir):
+        process_manifest(manifest_path=manifest_path, allow_terminal_retry=False)
+        manifest = load_json(manifest_path)
+        summaries.append(_summarize_manifest(manifest, manifest_path))
+    return summaries
+
+
+def reprocess_manifest_by_path(manifest_path: str | Path) -> dict[str, Any]:
+    """Reprocessa um manifesto específico pelo caminho e retorna seu resumo
+    atualizado. Usado pelo main.py para saber se um retry extra resolveu."""
+    manifest_path = Path(manifest_path)
+    process_manifest(manifest_path=manifest_path, allow_terminal_retry=False)
+    manifest = load_json(manifest_path)
+    return _summarize_manifest(manifest, manifest_path)
+
+
+def run_orchestrated(
+    run_type: str,
+    cutoff_iso: str | None = None,
+    retry_pending_first: bool = True,
+) -> dict[str, Any]:
+    """Entrada não-interativa usada pelo main.py orquestrador.
+
+    Primeiro reprocessa manifestos incompletos de runs anteriores (retry
+    silencioso, sem prompts), depois cria e processa a nova run
+    (daily/historical). Retorna um resumo estruturado para o relatório
+    central em vez de imprimir no console.
+    """
+    output_dir = OUTPUT_DIR.expanduser().resolve()
+    runs_dir = output_dir / RUNS_DIR_NAME
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    runs_dir.mkdir(parents=True, exist_ok=True)
+
+    state, state_path = initialize_or_load_state(
+        output_dir=output_dir,
+        runs_dir=runs_dir,
+    )
+
+    result: dict[str, Any] = {
+        "run_type": run_type,
+        "cutoff_used": cutoff_iso,
+        "retried_manifests": [],
+        "manifest": None,
+    }
+
+    if retry_pending_first:
+        for manifest_path in list_incomplete_manifests(runs_dir):
+            process_manifest(manifest_path=manifest_path, allow_terminal_retry=False)
+            manifest = load_json(manifest_path)
+            result["retried_manifests"].append(
+                _summarize_manifest(manifest, manifest_path)
+            )
+
+    if run_type == "daily":
+        manifest_path = create_daily_run(
+            state=state,
+            state_path=state_path,
+            runs_dir=runs_dir,
+            output_dir=output_dir,
+            occurred_before_override=cutoff_iso,
+        )
+    elif run_type == "historical":
+        manifest_path = create_historical_run(
+            state=state,
+            state_path=state_path,
+            runs_dir=runs_dir,
+            output_dir=output_dir,
+        )
+    else:
+        raise ValueError(f"run_type inválido para run_orchestrated: {run_type}")
+
+    process_manifest(manifest_path=manifest_path, allow_terminal_retry=False)
+    manifest = load_json(manifest_path)
+
+    result["manifest"] = _summarize_manifest(manifest, manifest_path)
+
+    return result
 
 
 if __name__ == "__main__":
