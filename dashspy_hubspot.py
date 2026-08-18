@@ -9,6 +9,7 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 
+import ijson
 import requests
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -324,6 +325,32 @@ def insert_rows(sb: Client, table: str, rows: list[dict], batch_size: int = 500,
     log.info("Total inserido em %s: %d linhas.", table, total)
 
 
+STREAM_THRESHOLD_BYTES = 200 * 1024 * 1024  # 200 MB
+
+
+def send_json_file_streaming(sb: Client, f: Path, table: str, on_conflict: str, batch_size: int = 2000) -> None:
+    """Envia um arquivo JSON grande demais para caber inteiro na memória.
+
+    Lê o arquivo item a item (ijson) e envia em lotes, sem nunca materializar
+    a lista completa — necessário para arquivos de centenas de MB / poucos GB
+    que estouram a RAM disponível com json.loads(f.read_text()).
+    """
+    batch: list[dict] = []
+    total = 0
+    with f.open("rb") as fh:
+        for row in ijson.items(fh, "item"):
+            batch.append(row)
+            if len(batch) >= batch_size:
+                sb.table(table).upsert(batch, on_conflict=on_conflict).execute()
+                total += len(batch)
+                log.info("Inseridas %d linhas em %s (streaming).", total, table)
+                batch = []
+    if batch:
+        sb.table(table).upsert(batch, on_conflict=on_conflict).execute()
+        total += len(batch)
+    log.info("Total inserido em %s: %d linhas (streaming).", table, total)
+
+
 # ---------------------------------------------------------------------------
 # Utilitários de arquivo temporário e confirmação
 # ---------------------------------------------------------------------------
@@ -340,6 +367,55 @@ def save_temp(platform: str, rows: list[dict], recording_ts: str) -> str:
         json.dump(rows, f, ensure_ascii=False, indent=2, default=str)
     log.info("Dados salvos em: %s (%d linhas)", path, len(rows))
     return str(path)
+
+
+PROCESSING_CHUNK_SIZE = 5000
+
+
+def process_and_save_chunked(
+    process_records,
+    all_objects: list[dict],
+    recording_ts: str,
+    platform: str,
+    chunk_size: int = PROCESSING_CHUNK_SIZE,
+) -> tuple[list[dict], str]:
+    """Processa e grava os objetos brutos já coletados em lotes de `chunk_size`,
+    em vez de tudo de uma vez (como process_records(all) + save_temp fariam).
+
+    Não muda nada da paginação/coleta por janelas — `all_objects` já chegou
+    aqui pronto, exatamente como antes. A diferença é só o que acontece depois:
+    cada lote é processado (ex: resolvendo deal flags só daquele lote, não do
+    total) e já gravado no arquivo de saída antes do próximo lote começar, em
+    vez de acumular estruturas de enriquecimento proporcionais ao volume total
+    (contact_to_deals, deal_pipelines etc.) inteiras em memória de uma vez.
+    """
+    ts = recording_ts.replace(":", "-").replace(" ", "_")
+    output_dir = Path(PATH_OUTPUTS_M)
+    output_dir.mkdir(exist_ok=True)
+    path = output_dir / f"{platform}_{ts}.json"
+
+    total = len(all_objects)
+    rows: list[dict] = []
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("[\n")
+        first = True
+        for i in range(0, total, chunk_size):
+            chunk = all_objects[i:i + chunk_size]
+            chunk_rows = process_records(chunk, recording_ts)
+            for row in chunk_rows:
+                if not first:
+                    fh.write(",\n")
+                json.dump(row, fh, ensure_ascii=False, default=str)
+                first = False
+            rows.extend(chunk_rows)
+            log.info(
+                "  Processados %d/%d (lote de %d).",
+                min(i + chunk_size, total), total, len(chunk),
+            )
+        fh.write("\n]\n")
+
+    log.info("Dados salvos em: %s (%d linhas)", path, len(rows))
+    return rows, str(path)
 
 
 def aguardar_confirmacao(nome: str, path: str) -> bool:
@@ -1022,8 +1098,7 @@ def run_hubspot_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str 
     if not all_contacts:
         return [], None
 
-    rows = process_hubspot_records(all_contacts, recording_ts)
-    path = save_temp("hubspot", rows, recording_ts)
+    rows, path = process_and_save_chunked(process_hubspot_records, all_contacts, recording_ts, "hubspot")
     log.info("HubSpot: %d contacts coletados.", len(rows))
     return rows, path
 
@@ -1328,8 +1403,7 @@ def run_deals_collect(sb: Client, recording_ts: str) -> tuple[list[dict], str | 
     if not all_deals:
         return [], None
 
-    rows = process_deal_records(all_deals, recording_ts)
-    path = save_temp("deals", rows, recording_ts)
+    rows, path = process_and_save_chunked(process_deal_records, all_deals, recording_ts, "deals")
     log.info("HubSpot Deals: %d deals coletados.", len(rows))
     return rows, path
 
@@ -1466,8 +1540,9 @@ def _resume_hubspot_collection(
         raise RuntimeError(f"Status de retry desconhecido para {source}: {status}")
 
     # Mantém o recording_ts da run original.
-    rows = process_records(all_objects, recording_ts)
-    output_path = save_temp(f"{source}_retry_complete", rows, recording_ts)
+    rows, output_path = process_and_save_chunked(
+        process_records, all_objects, recording_ts, f"{source}_retry_complete",
+    )
 
     state.update({
         "status": "ready_to_send",
@@ -1587,8 +1662,8 @@ def retry_from_outputs() -> None:
 
     print("\nArquivos disponíveis em outputs/:")
     for i, f in enumerate(json_files, 1):
-        size = len(json.loads(f.read_text(encoding="utf-8")))
-        print(f"  [{i}] {f.name}  ({size} linhas)")
+        size_mb = f.stat().st_size / (1024 * 1024)
+        print(f"  [{i}] {f.name}  ({size_mb:.1f} MB)")
 
     sel = input("\nNúmeros dos arquivos a enviar (ex: 1,3) ou 'todos': ").strip()
     if sel.lower() == "todos":
@@ -1609,6 +1684,20 @@ def retry_from_outputs() -> None:
         fn_send = PLATFORM_SEND_MAP.get(platform)
         if fn_send is None:
             log.warning("Plataforma desconhecida para '%s'. Pulando.", f.name)
+            continue
+
+        if platform == "hubspot" and f.stat().st_size > STREAM_THRESHOLD_BYTES:
+            size_mb = f.stat().st_size / (1024 * 1024)
+            resposta = input(f"  Enviar {f.name} ({size_mb:.1f} MB, modo streaming) para o Supabase? [s/N]: ").strip().lower()
+            if resposta != "s":
+                log.info("Envio de %s cancelado.", f.name)
+                continue
+            try:
+                send_json_file_streaming(sb, f, TABLE_HUB, on_conflict="hs_object_id")
+                log.info("%s enviado com sucesso.", f.name)
+            except Exception as exc:
+                log.error("Erro ao enviar %s: %s", f.name, exc, exc_info=True)
+                falhas.append(f.name)
             continue
 
         rows = json.loads(f.read_text(encoding="utf-8"))

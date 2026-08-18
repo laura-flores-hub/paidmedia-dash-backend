@@ -419,7 +419,7 @@ def send_google(sb: Client, rows: list[dict]) -> None:
 
 LINKEDIN_BASE_URL      = "https://api.linkedin.com/v2"
 LINKEDIN_REST_BASE_URL = "https://api.linkedin.com/rest"
-LINKEDIN_API_VERSION   = "202510"
+LINKEDIN_API_VERSION   = "202606"
 LINKEDIN_RETRY_WAIT    = 60
 LINKEDIN_MAX_RETRIES   = 5
 
@@ -663,8 +663,8 @@ def retry_from_outputs() -> None:
 
     print("\nArquivos disponíveis em outputs/:")
     for i, f in enumerate(json_files, 1):
-        size = len(json.loads(f.read_text(encoding="utf-8")))
-        print(f"  [{i}] {f.name}  ({size} linhas)")
+        size_mb = f.stat().st_size / (1024 * 1024)
+        print(f"  [{i}] {f.name}  ({size_mb:.1f} MB)")
 
     sel = input("\nNúmeros dos arquivos a enviar (ex: 1,3) ou 'todos': ").strip()
     if sel.lower() == "todos":
