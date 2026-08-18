@@ -1,56 +1,119 @@
 # Objetivo
-Código em Python que coleta, de forma automatizada e periódica, informações de cinco fontes externas — Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts e HubSpot Deals — e as centraliza no Supabase (PostgreSQL). Das plataformas de mídia paga (Meta Ads, Google Ads e LinkedIn Ads), são extraídos os valores de investimento por campanha. Do HubSpot, são extraídos dados de Contatos e Negócios ao longo do funil de vendas.
+Pipeline em Python que coleta, de forma automatizada e periódica, dados de mídia paga (Meta Ads, Google Ads, LinkedIn Ads) e do CRM/eventos do HubSpot (Contacts, Deals, Forms, page views e interações de anúncio), consolida atribuição de conversões e centraliza tudo no Supabase (PostgreSQL). Das plataformas de mídia paga são extraídos os valores de investimento por campanha. Do HubSpot, dados de Contatos e Negócios ao longo do funil de vendas, mais os eventos brutos usados para atribuir cada submissão de formulário a um anúncio.
 
-## Fluxo do pipeline e tratamento de falhas
+## Arquivos do projeto
 
-### Fase 1 — Coleta
+| Arquivo | Papel |
+|---|---|
+| `main.py` | Orquestrador. Roda o pipeline completo fim a fim (ver fluxo abaixo). |
+| `dashspy_ads.py` | Coleta Meta Ads, Google Ads e LinkedIn Ads. |
+| `dashspy_hubspot.py` | Coleta HubSpot Contacts e Deals. |
+| `hubspot_eventos_daily_historical_retry.py` | Extrai eventos brutos do HubSpot (forms, page views, interações de anúncio) via API de Events v3. |
+| `consolidate_hubspot_forms.py` | 1ª consolidação: junta os três tipos de evento de formulário num registro por submissão. |
+| `consolidate_conversions_forms_localsrc.py` | 2ª consolidação: cruza forms com page views/interações de anúncio e calcula atribuição final. |
+| `supabase_event_uploader.py` | Módulo de envio genérico (usado pelo `main.py`/consolidação de forms) para `data_hs_ad_interactions_v2` e `data_hs_form_submissions_v2`. |
 
-Cada fonte de dados é coletada de forma independente. Uma falha em qualquer plataforma é registrada em log mas não interrompe as demais coletas. Ao final da fase, todos os registros coletados são salvos como arquivos JSON no diretório `outputs/` (`outputs/<plataforma>_<timestamp>.json`), garantindo que nenhum dado seja perdido antes do envio.
+Cada um dos scripts de coleta (`dashspy_ads.py`, `dashspy_hubspot.py`, `hubspot_eventos_daily_historical_retry.py`) também funciona como CLI independente para depuração/reprocessamento manual — ver [Como executar](#como-executar).
 
-### Fase 2 — Confirmação e envio
+## Fluxo do pipeline orquestrado (`main.py`)
 
-Para cada plataforma com dados novos, o script exibe o caminho do arquivo temporário e solicita confirmação explícita antes de enviar ao Supabase. O envio pode ser cancelado por plataforma sem afetar as demais.
+### Fase 1 — Coleta/consolidação (nada é enviado ao Supabase ainda)
 
-### Tratamento de falhas de envio
+**Etapa A (paralelo):**
+- `dashspy_ads` — Meta/Google/LinkedIn; corte = ontem, já embutido no script.
+- `dashspy_hubspot` — Contacts + Deals; corte = `cutoff_ts` compartilhado da run.
 
-Se um envio falhar após a confirmação, a plataforma é registrada numa lista de falhas. Ao final da rodada, o script pergunta se o usuário deseja tentar novamente os envios com falha — esse ciclo se repete até que todos sejam bem-sucedidos ou o usuário encerre manualmente.
+**Etapa B (sequencial, mesmo `cutoff_ts` do HubSpot):**
+- `hubspot_eventos_daily_historical_retry` (modo `daily` por padrão; `--historical` força modo histórico)
+- `consolidate_hubspot_forms` (`--all-ready`)
+- `consolidate_conversions_forms_localsrc` (build local, sem upload ainda)
 
-Caso o processo seja interrompido após a coleta mas antes do envio, os arquivos em `outputs/` ficam disponíveis para reenvio via `--retry`, sem necessidade de re-coletar nas APIs.
+Cada plataforma/fonte é coletada de forma independente — uma falha em uma não interrompe as demais. Ao final da fase, tudo que foi coletado com sucesso está salvo localmente (`outputs/`, `hubspot_eventos/`), garantindo que nenhum dado coletado seja perdido antes do envio.
 
-#### Como executar
+### Fase 2 — Gate tudo-ou-nada
+
+Só segue para o envio se **todas** as etapas da Fase 1 terminaram limpas (nenhuma unidade/etapa com erro). Se qualquer coisa falhou, **nada** é enviado ao Supabase nessa run — nem ads, nem HubSpot CRM, nem forms/interações/conversões.
+
+### Fase 3 — Envio único ao Supabase (só roda se a Fase 2 aprovou)
+
+- Meta/Google/LinkedIn Ads → `data_meta_v2` / `data_google_v2` / `data_linkedin_v2`
+- HubSpot Contacts/Deals → `data_hs_contacts_v2` / `data_hs_deals_v2`
+- Interações de anúncio brutas → `data_hs_ad_interactions_v2`
+- Forms consolidados → `data_hs_form_submissions_v2`
+- Conversões consolidadas (atribuição final) → `data_hs_forms_conversions_consolidated_v1`
+
+### Retry automático (a nível de orquestrador)
+
+Qualquer unidade/etapa cujo erro pareça transitório (timeout, conexão, rate limit, HTTP 429/500/502/503/504) é tentada de novo até 2 vezes extras (3 tentativas no total), com backoff entre tentativas. Erros que não batem com esse padrão falham na primeira tentativa.
+
+### Trava de reexecução
+
+No início, o `main.py` verifica a run mais recente em `status/main_orchestrator_status.json`. Se ela não terminou com `overall_status="success"` (sobrou qualquer coleta ou envio incompleto), a nova execução é recusada — é preciso resolver manualmente ou rodar com `--force`. Como esse relatório só é gravado no **final** de uma run completa, uma execução interrompida no meio (ex: `Ctrl+C`, ou o processo morto pelo sistema) não deixa registro nenhum — a trava simplesmente não vê essa run e a próxima execução roda normal, sem exigir `--force`.
+
+### Robustez para volumes grandes / memória
+
+A coleta incremental do HubSpot (Contacts/Deals) usa `lastmodifieddate`/`hs_lastmodifieddate` a partir da última coleta registrada no Supabase. Se uma run fica muito tempo sem rodar (ou é interrompida antes de enviar), a próxima janela incremental cresce proporcionalmente — em produção já vimos janelas de ~15 dias gerarem mais de 770 mil contatos modificados de uma vez.
+
+Pra evitar que isso estoure a memória disponível:
+- A paginação por janelas (`_collect_hubspot_windows_with_retry_point`) já divide qualquer janela que bata no limite de 10.000 resultados da Search API e salva um retry point em disco se uma janela falhar persistentemente (`hubspot-resume`/`deals-resume`).
+- Depois da coleta, o processamento (conversão pro schema final + resolução de `has_valid_deal` via lookup de deals associados) roda em **lotes de 5.000** (`process_and_save_chunked`, ver `PROCESSING_CHUNK_SIZE` em `dashspy_hubspot.py`) em vez de tudo de uma vez — isso evita manter, ao mesmo tempo, a lista bruta inteira mais os dicionários de enriquecimento proporcionais ao volume total. Cada lote já é gravado no arquivo de saída antes do próximo começar.
+- O reenvio manual de arquivos já coletados (`--retry`, em ambos `dashspy_ads.py` e `dashspy_hubspot.py`) lista os arquivos de `outputs/` pelo tamanho em disco, sem carregar nenhum deles na memória só para exibir o menu. Arquivos de HubSpot Contacts acima de 200 MB são enviados via streaming (`ijson`, lendo item a item) em vez de `json.loads()` do arquivo inteiro — necessário porque um único contact export já passou de 1.4 GB nesse pipeline.
+
+## Como executar
 
 ```bash
-python dashspy_v1.py
+python main.py
 ```
-Executa o pipeline completo: coleta dados de Meta Ads, Google Ads, LinkedIn Ads, HubSpot Contacts e HubSpot Deals, salva os resultados localmente para revisão e aguarda confirmação antes de enviar ao Supabase.
+Roda o pipeline completo (Fases 1 a 3 acima), usando `daily` para `hubspot_eventos`.
 
 ```bash
-python dashspy_v1.py meta
-python dashspy_v1.py google
-python dashspy_v1.py linkedin
-python dashspy_v1.py hubspot
-python dashspy_v1.py deals
+python main.py --historical
 ```
-Executa o ciclo completo (coleta → confirmação → envio) para uma única plataforma. Útil para depurar ou reprocessar uma fonte específica sem rodar o pipeline inteiro. O subcomando `meta` pergunta quais contas coletar antes de iniciar.
+Mesmo pipeline, mas roda `hubspot_eventos` em modo histórico (retroage em blocos de 3 meses) em vez de `daily`.
 
 ```bash
-python dashspy_v1.py meta-resume
+python main.py --force
 ```
-Retoma a coleta do Meta Ads para uma conta específica a partir do ponto onde parou. Pergunta qual conta retomar, encontra o último `date_start` disponível no arquivo de outputs dessa conta e coleta a partir daí + 1 dia. Permite informar uma data final personalizada (padrão: ontem).
+Ignora a trava de reexecução (última run pendente/com erro) e roda mesmo assim.
+
+### Scripts individuais (depuração / reprocessamento pontual)
 
 ```bash
-python dashspy_v1.py --retry
+python dashspy_ads.py [meta|meta-resume|google|linkedin|--retry]
+python dashspy_hubspot.py [hubspot|deals|hubspot-all|hubspot-resume|deals-resume|--retry]
 ```
-Recarrega arquivos JSON salvos anteriormente em `outputs/` e reenvia ao Supabase sem re-coletar nas APIs. Útil para recuperar envios que falharam após uma coleta bem-sucedida.
+Roda o ciclo completo (coleta → confirmação → envio) para uma única fonte, sem passar pelo `main.py`. `meta` pergunta quais contas coletar antes de iniciar; `meta-resume` retoma a coleta de uma conta específica a partir do último `date_start` salvo. `hubspot-resume`/`deals-resume` retomam uma coleta que ficou com retry point pendente. `--retry` recarrega arquivos já salvos em `outputs/` e reenvia ao Supabase sem re-coletar nas APIs — pede confirmação por arquivo antes de enviar.
 
-## APIs 
+```bash
+python hubspot_eventos_daily_historical_retry.py --run-type daily --cutoff-ts 2026-08-07T21:12:40Z
+```
+Roda a extração de eventos com um cutoff (`occurred_before`) específico, em vez de "agora" — útil para alinhar manualmente essa etapa com um cutoff que os outros scripts já usaram (ex: recuperando uma run que ficou incompleta). Sem `--cutoff-ts`, usa o instante atual. Sem `--run-type`, abre um menu interativo (`daily`/`historical`/`retry`).
+
+```bash
+python consolidate_hubspot_forms.py --all-ready
+python consolidate_conversions_forms_localsrc.py
+```
+Consolidam localmente o que a extração de eventos já deixou pronto. O segundo pede confirmação interativa antes de enviar ao Supabase; falha com `PendingFormRunsError` se ainda houver runs de forms não consolidadas pelo primeiro.
+
+## Variáveis de ambiente (`.env`)
+
+| Variável | Usada por |
+|---|---|
+| `SUPABASE_URL`, `SUPABASE_KEY` | Todos os scripts que leem/escrevem no Supabase. |
+| `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_IDS` | `dashspy_ads.py` (Meta). |
+| `GOOGLE_ADS_YAML_PATH` | `dashspy_ads.py` (Google — credenciais reais ficam em `google-ads.yaml`). |
+| `LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_AD_ACCOUNT_IDS` | `dashspy_ads.py` (LinkedIn). |
+| `HUBSPOT_TOKEN` | `dashspy_hubspot.py` e `hubspot_eventos_daily_historical_retry.py`. |
+| `PATH_OUTPUTS_M` | Diretório de saída dos JSONs temporários de `dashspy_ads.py`/`dashspy_hubspot.py`. |
+| `PATH_LOGS_M`, `PATH_LOGS_E`, `PATH_LOGS_F` | Diretórios de log (main/eventos/forms). |
+
+## APIs
 ### API Meta
 #### Autenticação:
-As credenciais estão discriminadas no arquivo .env nas seguintes variáveis:
 - Token de acesso: `META_ACCESS_TOKEN`
 - IDs das Contas de Anúncios: `META_AD_ACCOUNT_IDS` (separados por vírgula)
 
-#### Endpoints: 
+#### Endpoints:
 ##### URL base:
 - https://graph.facebook.com/v25.0
 
@@ -85,7 +148,7 @@ A extração é massiva, o que acionará as travas de volume da Meta. O script p
 
 Erros de conexão (`ConnectionError`) e timeout (`ReadTimeout`) também são retentados com a mesma lógica.
 ###### Recuperação de erros mid-coleta:
-Os dados são coletados em janelas anuais. Se um erro ocorrer durante a paginação de uma janela (incluindo cursor inválido `#2642`), o script salva imediatamente os registros das janelas já concluídas em `outputs/meta_<account_id>_<timestamp>.json` e encerra a coleta daquela conta. Use `python dashspy_v1.py meta-resume` para retomar a partir da última data disponível.
+Os dados são coletados em janelas anuais. Se um erro ocorrer durante a paginação de uma janela (incluindo cursor inválido `#2642`), o script salva imediatamente os registros das janelas já concluídas em `outputs/meta_<account_id>_<timestamp>.json` e encerra a coleta daquela conta. Use `python dashspy_ads.py meta-resume` para retomar a partir da última data disponível.
 ###### Batch Requests:
 Ele respeita o limite rígido de 50 requisições por lote.
 
@@ -144,7 +207,6 @@ Busca todos os gastos de todas as campanhas. Para isso, considera os valores:
 
 ### API LinkedIn Ads
 #### Autenticação:
-As credenciais estão discriminadas no arquivo .env nas seguintes variáveis:
 - Token de acesso: `LINKEDIN_ACCESS_TOKEN`
 - IDs das Contas de Anúncios: `LINKEDIN_AD_ACCOUNT_IDS` (separados por vírgula)
 
@@ -171,27 +233,29 @@ A aquisição de dados utiliza chamadas diretas à API REST do LinkedIn via `sub
 #### Funcionamento esperado:
 1. Verifica a última data registrada na tabela do LinkedIn no Supabase.
 2. Se vazia, inicia carga histórica desde 2023-09-01.
-3. A coleta é feita em janelas trimestrais para evitar timeouts.
-4. Inclui proteção contra rate limiting (HTTP 429) com backoff e até 5 tentativas.
+3. A coleta é feita em janelas diárias.
+4. Inclui proteção contra rate limiting (HTTP 429) com backoff e retentativas.
 
-### API HubSpot
+### API HubSpot (CRM — Contacts/Deals)
 #### Autenticação:
-A credencial está discriminada no .env na seguinte variável:
-- Token de acesso: `TOKEN_ACESSO_HUBSPOT`
+- Token de acesso: `HUBSPOT_TOKEN`
 
 #### Método de consulta:
-Utiliza a HubSpot Search API (v3) com filtros por `createdate` em janelas diárias, para contornar o limite de 10.000 resultados por query. Todas as requisições usam POST com payload JSON.
+Utiliza a HubSpot Search API (v3), com filtros por período em janelas diárias (subdivididas automaticamente se uma janela bater no limite de 10.000 resultados por query). Todas as requisições usam POST com payload JSON.
 
 ##### Endpoint base:
 - https://api.hubapi.com/crm/v3/objects
+
+#### Modo de coleta:
+- **FULL** (tabela vazia no Supabase): busca tudo desde `2025-08-01` filtrando por `createdate`.
+- **INCREMENTAL** (tabela já tem dados): busca tudo criado **e** modificado desde a última coleta registrada (`dt_h_recording_data` mais recente na tabela), filtrando por `lastmodifieddate` (Contacts) ou `hs_lastmodifieddate` (Deals). O corte superior é fixo no início da run (`recording_ts`) — eventos novos durante a execução ficam pra próxima.
+
+Se uma janela falhar persistentemente, um retry point é salvo em disco e a próxima tentativa não reprocessa do zero (`hubspot-resume`/`deals-resume`).
 
 #### HubSpot Contacts
 
 ##### Endpoint:
 - `/contacts/search` — POST
-
-##### Filtro de período:
-Contacts criados a partir da última data registrada no Supabase (com lookback de 45 dias), paginados em janelas de 1 dia.
 
 ##### Dados Capturados:
 - *hs_object_id*, *createdate*, *lastmodifieddate*
@@ -204,15 +268,12 @@ Contacts criados a partir da última data registrada no Supabase (com lookback d
 - *hs_object_source_detail_1*, *hs_analytics_source_data_1*, *hs_analytics_source_data_2*
 - *stage_of_the_deal*, *motivo_no_interesado*, *conversion_de_lead*
 - *hubspot_team_id*, *form_submitted*, *country*, *region*, *main_country*
-- *has_valid_deal*: booleano calculado — `True` se o contato não possui deals ou possui ao menos um deal fora dos pipelines excluídos (Business Partner, BDRs, Partnerships)
+- *has_valid_deal*: booleano calculado — `True` se o contato não possui deals ou possui ao menos um deal fora dos pipelines excluídos (Business Partner, BDRs, Partnerships). Calculado buscando as associações contact→deals e o `pipeline` de cada deal via Associations/Deals Batch API (v4), em lotes de 100.
 
 #### HubSpot Deals
 
 ##### Endpoint:
 - `/deals/search` — POST
-
-##### Filtro de período:
-Deals criados a partir da última data registrada no Supabase, paginados em janelas de 1 dia.
 
 ##### Dados Capturados:
 - *hs_object_id*, *dealname*, *amount*
@@ -221,6 +282,23 @@ Deals criados a partir da última data registrada no Supabase, paginados em jane
 - *hubspot_owner_id*, *ae_deal_won*, *ae_squad*
 - *first_meeting_status*, *deal_source*, *pais*
 - *contact_ids*: lista de IDs de contatos associados ao deal (via Associations Batch API v4)
+
+### API HubSpot (Events v3 — forms, page views, interações de anúncio)
+Usada por `hubspot_eventos_daily_historical_retry.py`, desacoplada da API de CRM acima — mesma autenticação (`HUBSPOT_TOKEN`), endpoint e paginação diferentes (paginação por cursor `paging.next.after`, não por janela de 10.000).
+
+#### Tipos de evento extraídos:
+- `e_submitted_form` — página/URL de origem da submissão
+- `e_form_submission_v2` — evento base de submissão (contact_id, form_id, timestamp)
+- `e_form_submission_metadata_v2` — título do form, lifecycle stage no momento da submissão
+- `e_ad_interaction` — interações com anúncios (clique, utms, campanha)
+- `e_visited_page` — page views
+
+#### Funcionamento esperado:
+1. Modo `daily`: janela = `daily_next_after` (cursor salvo em `hubspot_eventos/estado_extracao_eventos.json`) até `occurred_before` (agora, ou um valor fixo via `--cutoff-ts`).
+2. Modo `historical`: retroage a partir de `historical_next_before` em blocos de 3 meses.
+3. Cada run gera um manifesto (`hubspot_eventos/_runs/<run_id>.json`) com status por tipo de evento — permite retry seletivo (`--run-type retry`) sem repetir tipos que já deram certo.
+4. `consolidate_hubspot_forms.py` junta os três eventos de formulário (por contact_id + `hs_form_id` numa janela de tempo configurável) em um registro por submissão.
+5. `consolidate_conversions_forms_localsrc.py` cruza esses forms consolidados com `e_ad_interaction`/`e_visited_page` (evento mais recente antes da submissão, dentro de 15 minutos), filtra só forms classificados como TOFU/MOFU/BOFU (tabela `validation_funnel_forms_kws_v2` no Supabase) e grava a atribuição final.
 
 ## Supabase
 ### Tabelas:
@@ -258,7 +336,7 @@ cost | FLOAT
 ad_account_id | STRING
 dt_h_recording_data | TIMESTAMP
 
-- `data_hs_contacts_v2`
+- `data_hs_contacts_v2` — upsert por `hs_object_id`
 
 Field name | Type
 -- | --
@@ -294,7 +372,7 @@ region | STRING
 main_country | STRING
 has_valid_deal | BOOLEAN
 
-- `data_hs_deals_v2`
+- `data_hs_deals_v2` — upsert por `hs_object_id`
 
 Field name | Type
 -- | --
@@ -314,3 +392,11 @@ first_meeting_status | STRING
 deal_source | STRING
 pais | STRING
 contact_ids | ARRAY
+
+- `data_hs_ad_interactions_v2` — eventos brutos `e_ad_interaction`, upsert por `event_id`, populada por `supabase_event_uploader.py` (ignora duplicatas, não atualiza linhas existentes).
+
+- `data_hs_form_submissions_v2` — forms consolidados (saída de `consolidate_hubspot_forms.py`), upsert por `(contact_id, submitted_at)`, populada por `supabase_event_uploader.py`.
+
+- `data_hs_forms_conversions_consolidated_v1` — atribuição final de conversão (saída de `consolidate_conversions_forms_localsrc.py`), upsert por `(contact_id, submitted_at)`. Contém campos prefixados `forms_*` (dados do formulário: título, URL, UTMs, referrer, `hsa_*`) e `ads_*` (dados do anúncio casado: campanha, adgroup, network, utms), mais `form_id`, `final_has_ad_attribution`.
+
+- `validation_funnel_forms_kws_v2` — tabela de referência mantida manualmente (`form_id`, `selected_funnel_stage`). Só formulários listados aqui com estágio `tofu`/`mofu`/`bofu` entram na consolidação de conversões — qualquer form_id ausente ou sem estágio válido é excluído do funil, mesmo que a submissão tenha sido coletada normalmente.
