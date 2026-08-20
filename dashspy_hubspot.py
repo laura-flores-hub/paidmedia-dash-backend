@@ -4,6 +4,7 @@ Coleta dados de HubSpot (Contacts e Deals) e centraliza no Supabase.
 """
 
 import os
+import sys
 import time
 import json
 import logging
@@ -21,7 +22,17 @@ from pathlib import Path
 
 LOG_DIR = Path(__file__).resolve().parent / "logs/dashspy"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-LOG_FILE = LOG_DIR / f"dashspy_hubspot_{os.getpid()}.log"
+# Arquivo único e cumulativo (não mais um por PID) — cada execução nova
+# entra em modo append, separada por um cabeçalho com data/hora, em vez de
+# espalhar o histórico em dezenas de arquivos por processo.
+LOG_FILE = LOG_DIR / "dashspy_hubspot.log"
+with open(LOG_FILE, "a", encoding="utf-8") as _f:
+    _f.write(
+        f"\n{'=' * 90}\n"
+        f"NOVA EXECUÇÃO — PID {os.getpid()} — "
+        f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+        f"{'=' * 90}\n"
+    )
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,7 +40,7 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
     handlers=[
         RichHandler(rich_tracebacks=True, markup=True),
-        logging.FileHandler(LOG_FILE, mode="w", encoding="utf-8")
+        logging.FileHandler(LOG_FILE, mode="a", encoding="utf-8")
     ]
 )
 
@@ -229,6 +240,33 @@ def _read_json_file(path: Path):
         return json.load(file)
 
 
+def _read_json_array_streaming(path: Path) -> list[dict]:
+    """Lê um arquivo JSON cujo conteúdo é um array, item a item (ijson).
+
+    Usado para recarregar checkpoints de retry point / arquivos já
+    processados que podem chegar a centenas de MB ou alguns GB — evita o
+    pico de memória de `json.load()`, que precisa manter o texto bruto
+    inteiro e a estrutura parseada em memória ao mesmo tempo.
+
+    As chaves de cada dict são passadas por `sys.intern()`: quando o Python
+    monta um dict a partir de um literal no código (como process_hubspot_records
+    faz), as strings das chaves são compartilhadas entre todas as instâncias
+    automaticamente. Reconstruir os mesmos dicts a partir de texto JSON não
+    tem esse compartilhamento de graça — cada linha recria suas próprias
+    cópias de "hs_object_id", "email" etc. Para ~50 campos x ~800 mil linhas,
+    isso sozinho já dobrou o consumo de memória num teste real. `intern()`
+    garante que chaves iguais apontem pro mesmo objeto de string.
+    """
+    rows: list[dict] = []
+    with path.open("rb") as file:
+        # use_float=True: sem isso, ijson decodifica números com ponto
+        # decimal como decimal.Decimal, que não é serializável pelo `json`
+        # padrão — quebra o envio ao Supabase (campos como "cost"/"amount").
+        for row in ijson.items(file, "item", use_float=True):
+            rows.append({sys.intern(k): v for k, v in row.items()})
+    return rows
+
+
 def _load_retry_state(source: str) -> dict | None:
     path = _retry_state_path(source)
     if not path.exists():
@@ -338,7 +376,8 @@ def send_json_file_streaming(sb: Client, f: Path, table: str, on_conflict: str, 
     batch: list[dict] = []
     total = 0
     with f.open("rb") as fh:
-        for row in ijson.items(fh, "item"):
+        # use_float=True: ver comentário equivalente em _read_json_array_streaming.
+        for row in ijson.items(fh, "item", use_float=True):
             batch.append(row)
             if len(batch) >= batch_size:
                 sb.table(table).upsert(batch, on_conflict=on_conflict).execute()
@@ -372,35 +411,57 @@ def save_temp(platform: str, rows: list[dict], recording_ts: str) -> str:
 PROCESSING_CHUNK_SIZE = 5000
 
 
-def process_and_save_chunked(
+def _list_in_chunks(all_objects: list[dict], chunk_size: int):
+    total = len(all_objects)
+    for i in range(0, total, chunk_size):
+        yield all_objects[i:i + chunk_size], min(i + chunk_size, total), total
+
+
+def _json_file_in_chunks(path: Path, chunk_size: int):
+    """Lê um array JSON em disco em lotes de `chunk_size`, item a item
+    (ijson) — nunca materializa o array bruto inteiro em memória, só o
+    lote atual. Necessário quando o próprio arquivo bruto (não só a lista
+    já processada) é grande demais pra caber inteiro em RAM."""
+    chunk: list[dict] = []
+    total_so_far = 0
+    with path.open("rb") as fh:
+        # use_float=True: ver comentário equivalente em _read_json_array_streaming.
+        for item in ijson.items(fh, "item", use_float=True):
+            chunk.append(item)
+            if len(chunk) >= chunk_size:
+                total_so_far += len(chunk)
+                yield chunk, total_so_far, None
+                chunk = []
+    if chunk:
+        total_so_far += len(chunk)
+        yield chunk, total_so_far, None
+
+
+def _process_and_save_from_chunk_source(
     process_records,
-    all_objects: list[dict],
+    chunk_source,
     recording_ts: str,
     platform: str,
-    chunk_size: int = PROCESSING_CHUNK_SIZE,
 ) -> tuple[list[dict], str]:
-    """Processa e grava os objetos brutos já coletados em lotes de `chunk_size`,
-    em vez de tudo de uma vez (como process_records(all) + save_temp fariam).
+    """Processa e grava, lote a lote, o que `chunk_source` for entregando
+    — em vez de manter a entrada bruta inteira (lista ou arquivo) em memória
+    de uma vez. Cada lote é processado (ex: resolvendo deal flags só daquele
+    lote) e já gravado no arquivo de saída antes do próximo começar.
 
-    Não muda nada da paginação/coleta por janelas — `all_objects` já chegou
-    aqui pronto, exatamente como antes. A diferença é só o que acontece depois:
-    cada lote é processado (ex: resolvendo deal flags só daquele lote, não do
-    total) e já gravado no arquivo de saída antes do próximo lote começar, em
-    vez de acumular estruturas de enriquecimento proporcionais ao volume total
-    (contact_to_deals, deal_pipelines etc.) inteiras em memória de uma vez.
+    `rows` (o resultado final, já no schema enxuto da tabela) continua
+    acumulado inteiro em memória pra ser devolvido no final — isso é seguro
+    porque o schema final é bem menor que a representação bruta da API.
     """
     ts = recording_ts.replace(":", "-").replace(" ", "_")
     output_dir = Path(PATH_OUTPUTS_M)
     output_dir.mkdir(exist_ok=True)
     path = output_dir / f"{platform}_{ts}.json"
 
-    total = len(all_objects)
     rows: list[dict] = []
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("[\n")
         first = True
-        for i in range(0, total, chunk_size):
-            chunk = all_objects[i:i + chunk_size]
+        for chunk, processed_so_far, total in chunk_source:
             chunk_rows = process_records(chunk, recording_ts)
             for row in chunk_rows:
                 if not first:
@@ -408,14 +469,30 @@ def process_and_save_chunked(
                 json.dump(row, fh, ensure_ascii=False, default=str)
                 first = False
             rows.extend(chunk_rows)
-            log.info(
-                "  Processados %d/%d (lote de %d).",
-                min(i + chunk_size, total), total, len(chunk),
-            )
+            if total is not None:
+                log.info("  Processados %d/%d (lote de %d).", processed_so_far, total, len(chunk))
+            else:
+                log.info("  Processados %d (lote de %d).", processed_so_far, len(chunk))
         fh.write("\n]\n")
 
     log.info("Dados salvos em: %s (%d linhas)", path, len(rows))
     return rows, str(path)
+
+
+def process_and_save_chunked(
+    process_records,
+    all_objects: list[dict],
+    recording_ts: str,
+    platform: str,
+    chunk_size: int = PROCESSING_CHUNK_SIZE,
+) -> tuple[list[dict], str]:
+    """Processa e grava os objetos brutos já coletados (em memória) em lotes
+    de `chunk_size`, em vez de tudo de uma vez. Não muda nada da paginação/
+    coleta por janelas — `all_objects` já chegou aqui pronto, exatamente como
+    antes."""
+    return _process_and_save_from_chunk_source(
+        process_records, _list_in_chunks(all_objects, chunk_size), recording_ts, platform,
+    )
 
 
 def aguardar_confirmacao(nome: str, path: str) -> bool:
@@ -1474,7 +1551,7 @@ def _resume_hubspot_collection(
         if not output_path.exists():
             raise RuntimeError(f"Arquivo final do retry não encontrado: {output_path}")
 
-        rows = _read_json_file(output_path)
+        rows = _read_json_array_streaming(output_path)
         log.info(
             "%s: retry já coletado e processado. Arquivo pronto para envio: %s",
             object_label,
@@ -1491,24 +1568,41 @@ def _resume_hubspot_collection(
     if not partial_raw_path.exists():
         raise RuntimeError(f"Arquivo parcial do retry não encontrado: {partial_raw_path}")
 
-    all_objects = _read_json_file(partial_raw_path)
-    if not isinstance(all_objects, list):
-        raise RuntimeError(f"Arquivo parcial inválido: {partial_raw_path}")
-
     log.info(
         "=== Retomando %s === Início=%s (%s); cutoff original=%s (%s); "
-        "recording_ts original=%s; objetos preservados=%d.",
+        "recording_ts original=%s; retomando a partir do checkpoint em disco (%s).",
         object_label,
         resume_from_ms,
         _ms_to_iso(resume_from_ms),
         cutoff_ms,
         _ms_to_iso(cutoff_ms),
         recording_ts,
-        len(all_objects),
+        partial_raw_path,
     )
 
     if status == "pending_collection":
-        all_objects, completed = _collect_hubspot_windows_with_retry_point(
+        # O backlog já coletado (potencialmente grande — pode passar de 1GB)
+        # é convertido pro schema final ANTES de tentar resolver a janela que
+        # falhou. Isso é necessário porque _collect_hubspot_windows_with_retry_point,
+        # ao usar existing_objects=None (única forma de não precisar recarregar
+        # o backlog bruto inteiro em memória), sobrescreve o MESMO arquivo de
+        # checkpoint (_retry_raw_path é determinístico por source+recording_ts)
+        # se essa janela falhar de novo — então o backlog só fica seguro depois
+        # de já estar convertido e salvo em backlog_processed_path.
+        backlog_processed_path = state.get("backlog_processed_path")
+        if backlog_processed_path and Path(backlog_processed_path).exists():
+            backlog_rows = _read_json_array_streaming(Path(backlog_processed_path))
+        else:
+            backlog_rows, backlog_processed_path = _process_and_save_from_chunk_source(
+                process_records,
+                _json_file_in_chunks(partial_raw_path, PROCESSING_CHUNK_SIZE),
+                recording_ts,
+                f"{source}_retry_backlog",
+            )
+            state["backlog_processed_path"] = backlog_processed_path
+            _save_retry_state(source, state)
+
+        new_objects, completed = _collect_hubspot_windows_with_retry_point(
             source=source,
             object_label=object_label,
             fetch_window=fetch_window,
@@ -1516,37 +1610,47 @@ def _resume_hubspot_collection(
             cutoff_ms=cutoff_ms,
             filter_property=filter_property,
             recording_ts=recording_ts,
-            existing_objects=all_objects,
+            existing_objects=None,
             pending_windows=state.get("pending_windows"),
         )
 
         if not completed:
+            # A chamada acima pode ter sobrescrito o checkpoint bruto original
+            # (agora vazio/menor) e o retry state — não tem problema, porque
+            # o backlog já está convertido e salvo à parte. Preserva essa
+            # referência por cima do que a chamada acabou de gravar.
+            refreshed_state = _load_retry_state(source) or {}
+            refreshed_state["backlog_processed_path"] = backlog_processed_path
+            refreshed_state["recording_ts"] = recording_ts
+            _save_retry_state(source, refreshed_state)
             raise RetryPointPending(
-                f"O retry de {object_label} falhou novamente. "
-                "O retry point foi atualizado para a nova janela."
+                f"{len(backlog_rows)} registros já processados e salvos com segurança "
+                f"em {backlog_processed_path} (ainda não enviados). A janela pendente "
+                f"de {object_label} falhou de novo. Rode o resume outra vez para tentar "
+                "só essa janela restante — o backlog não será reprocessado."
             )
 
-        _write_json_atomic(partial_raw_path, all_objects)
-        state.update({
-            "status": "collected",
-            "resume_from_ms": cutoff_ms,
-            "failed_window_end_ms": None,
-            "pending_windows": [],
-            "last_error": None,
-        })
-        _save_retry_state(source, state)
+        new_rows = process_records(new_objects, recording_ts) if new_objects else []
+        rows = backlog_rows + new_rows
+        output_path = save_temp(f"{source}_retry_complete", rows, recording_ts)
 
-    elif status != "collected":
+    elif status == "collected":
+        rows, output_path = _process_and_save_from_chunk_source(
+            process_records,
+            _json_file_in_chunks(partial_raw_path, PROCESSING_CHUNK_SIZE),
+            recording_ts,
+            f"{source}_retry_complete",
+        )
+
+    else:
         raise RuntimeError(f"Status de retry desconhecido para {source}: {status}")
-
-    # Mantém o recording_ts da run original.
-    rows, output_path = process_and_save_chunked(
-        process_records, all_objects, recording_ts, f"{source}_retry_complete",
-    )
 
     state.update({
         "status": "ready_to_send",
         "complete_output_path": output_path,
+        "pending_windows": [],
+        "failed_window_end_ms": None,
+        "last_error": None,
     })
     _save_retry_state(source, state)
 

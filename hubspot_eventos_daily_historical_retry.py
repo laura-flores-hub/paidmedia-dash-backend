@@ -51,7 +51,17 @@ from dotenv import load_dotenv
 
 LOG_DIR = Path(__file__).resolve().parent / "logs/hubspot_eventos"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-LOG_FILE = LOG_DIR / f"hubspot_eventos_{os.getpid()}.log"
+# Arquivo único e cumulativo (não mais um por PID) — cada execução nova
+# entra em modo append, separada por um cabeçalho com data/hora, em vez de
+# espalhar o histórico em dezenas de arquivos por processo.
+LOG_FILE = LOG_DIR / "hubspot_eventos.log"
+with open(LOG_FILE, "a", encoding="utf-8") as _f:
+    _f.write(
+        f"\n{'=' * 90}\n"
+        f"NOVA EXECUÇÃO — PID {os.getpid()} — "
+        f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+        f"{'=' * 90}\n"
+    )
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,7 +69,7 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
     handlers=[
         RichHandler(rich_tracebacks=True, markup=True),
-        logging.FileHandler(LOG_FILE, mode="w", encoding="utf-8")
+        logging.FileHandler(LOG_FILE, mode="a", encoding="utf-8")
     ]
 )
 

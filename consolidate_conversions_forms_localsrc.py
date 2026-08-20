@@ -80,7 +80,17 @@ LOG_DIR = BASE_DIR / "logs/consolidate_conversions"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
-LOG_FILE = LOG_DIR / f"consolidate_conversions_{RUN_TIMESTAMP}.log"
+# Arquivo único e cumulativo (não mais um por run) — cada execução nova
+# entra em modo append, separada por um cabeçalho com data/hora, em vez de
+# espalhar o histórico em dezenas de arquivos por timestamp.
+LOG_FILE = LOG_DIR / "consolidate_conversions.log"
+with open(LOG_FILE, "a", encoding="utf-8") as _f:
+    _f.write(
+        f"\n{'=' * 90}\n"
+        f"NOVA EXECUÇÃO — PID {os.getpid()} — "
+        f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+        f"{'=' * 90}\n"
+    )
 
 logging.basicConfig(
     level=logging.INFO,
@@ -94,7 +104,7 @@ logging.basicConfig(
         ),
         logging.FileHandler(
             LOG_FILE,
-            mode="w",
+            mode="a",
             encoding="utf-8",
         ),
     ],

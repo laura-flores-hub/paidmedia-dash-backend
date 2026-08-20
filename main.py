@@ -33,11 +33,23 @@ correção para erro desconhecido.
 
 Trava de reexecução: no início, o main.py verifica a run mais recente no
 relatório central. Se ela não terminou com overall_status="success" (ou
-seja, sobrou qualquer coleta ou envio incompleto), a nova execução é
-recusada — é preciso resolver manualmente ou rodar com --force.
+seja, sobrou qualquer coleta/envio incompleto, ou o processo foi
+interrompido no meio), a nova execução:
+  - com --force: ignora a run anterior e começa 100% do zero;
+  - com --resume: retoma automaticamente, reaproveitando as unidades
+    (plataformas de ads, contacts/deals do HubSpot) e etapas (eventos/
+    forms/conversions) já concluídas na tentativa anterior — só roda de
+    novo o que ainda não foi feito;
+  - sem nenhuma flag, em terminal interativo: pergunta ao usuário se quer
+    retomar (mesmo comportamento de --resume) ou recusa a execução;
+  - sem nenhuma flag, fora de terminal interativo (cron etc.): recusa a
+    execução e orienta a rodar com --resume ou --force.
 
 Relatório central: status/main_orchestrator_status.json — um único arquivo,
 sempre atualizado, com a run mais recente na posição 0 (histórico decrescente).
+O relatório da run em andamento é gravado incrementalmente (a cada etapa
+concluída, não só no final) — se o processo for interrompido no meio,
+o relatório já reflete exatamente o que foi feito até ali.
 """
 
 from __future__ import annotations
@@ -83,28 +95,46 @@ _LOG_FORMATTER = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s", 
 
 MAIN_LOG_DIR = BASE_DIR / "logs" / "main"
 MAIN_LOG_DIR.mkdir(parents=True, exist_ok=True)
-MAIN_LOG_FILE = MAIN_LOG_DIR / f"main_{os.getpid()}.log"
+# Arquivo único e cumulativo (não mais um por PID) — cada execução nova
+# entra em modo append, separada por um cabeçalho com data/hora.
+MAIN_LOG_FILE = MAIN_LOG_DIR / "main.log"
+
+
+def _write_log_run_separator(log_file: Path) -> None:
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(
+            f"\n{'=' * 90}\n"
+            f"NOVA EXECUÇÃO — PID {os.getpid()} — "
+            f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+            f"{'=' * 90}\n"
+        )
 
 
 def _attach_dedicated_file_handler(module) -> None:
     """Dá a cada subcódigo seu próprio arquivo de log real (module.LOG_FILE),
-    em vez de depender do basicConfig (que só funciona para o 1º import)."""
+    em vez de depender do basicConfig (que só funciona para o 1º import).
+    O módulo já escreveu seu próprio separador de execução no import (ver
+    LOG_FILE de cada um) — aqui só reabrimos em append, sem truncar."""
     log_file = getattr(module, "LOG_FILE", None)
     module_log = getattr(module, "log", None)
     if log_file is None or module_log is None:
         return
     Path(log_file).parent.mkdir(parents=True, exist_ok=True)
-    handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+    handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
     handler.setFormatter(_LOG_FORMATTER)
     module_log.addHandler(handler)
     module_log.propagate = True  # mensagens continuam aparecendo no console também
 
 
-for _module in (dashspy_ads, dashspy_hubspot, hubspot_eventos, consolidate_hubspot_forms, consolidate_conversions):
+for _module in (
+    dashspy_ads, dashspy_hubspot, hubspot_eventos,
+    consolidate_hubspot_forms, consolidate_conversions,
+):
     _attach_dedicated_file_handler(_module)
 
 log = logging.getLogger("main_orchestrator")
-_main_file_handler = logging.FileHandler(MAIN_LOG_FILE, mode="w", encoding="utf-8")
+_write_log_run_separator(MAIN_LOG_FILE)
+_main_file_handler = logging.FileHandler(MAIN_LOG_FILE, mode="a", encoding="utf-8")
 _main_file_handler.setFormatter(_LOG_FORMATTER)
 log.addHandler(_main_file_handler)
 
@@ -151,6 +181,11 @@ def cutoff_recording_ts(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%S UTC")
 
 
+def parse_cutoff_iso(cutoff_ts: str) -> datetime:
+    """Parseia de volta o formato produzido por iso() ('...Z')."""
+    return datetime.strptime(cutoff_ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
 def load_json(path: Path) -> Any:
     import json
     return json.loads(path.read_text(encoding="utf-8"))
@@ -163,6 +198,25 @@ def write_json_atomic(path: Path, data: Any) -> None:
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     os.fsync(os.open(tmp, os.O_RDONLY))
     tmp.replace(path)
+
+
+def _load_local_rows(path_field: str) -> list[dict]:
+    """Recarrega as linhas já coletadas e salvas localmente numa tentativa
+    anterior, pra reaproveitar em vez de recoletar da API.
+
+    `path_field` pode ser um único caminho ou vários separados por ", "
+    (é assim que run_meta_collect devolve — um arquivo por conta). Usa o
+    leitor em streaming do dashspy_hubspot (item a item, com intern() nas
+    chaves) pra qualquer arquivo, grande ou pequeno — é seguro e evita
+    duplicar essa lógica aqui.
+    """
+    rows: list[dict] = []
+    for part in path_field.split(","):
+        p = part.strip()
+        if not p:
+            continue
+        rows.extend(dashspy_hubspot._read_json_array_streaming(Path(p)))
+    return rows
 
 
 def _strip_runtime_fields(obj: Any) -> Any:
@@ -218,7 +272,7 @@ def _retry_loop(label: str, attempt_fn: Callable[[], dict[str, Any]]) -> dict[st
 # Fase 1 / Etapa A: dashspy_ads (coleta apenas — sem envio)
 # ---------------------------------------------------------------------------
 
-def run_ads_stage() -> dict[str, Any]:
+def run_ads_stage(prior_platforms: dict[str, Any] | None = None) -> dict[str, Any]:
     stage: dict[str, Any] = {"name": "dashspy_ads", "started_at": iso(utc_now()), "platforms": {}}
     sb = dashspy_ads.get_supabase_client()
     recording_ts = utc_now().strftime("%Y-%m-%dT%H:%M:%S UTC")
@@ -232,6 +286,33 @@ def run_ads_stage() -> dict[str, Any]:
     ]
 
     for key, nome, fn_collect, fn_send in pipelines:
+        prior = (prior_platforms or {}).get(key)
+
+        if prior and prior.get("status") == "sent":
+            log.info("dashspy_ads[%s]: já enviado numa tentativa anterior — pulando.", nome)
+            stage["platforms"][key] = prior
+            continue
+
+        if prior and prior.get("status") == "collected" and prior.get("local_file"):
+            try:
+                rows = _load_local_rows(prior["local_file"])
+                log.info(
+                    "dashspy_ads[%s]: reaproveitando %d linhas já coletadas em %s "
+                    "(tentativa anterior) — não vai recoletar.",
+                    nome, len(rows), prior["local_file"],
+                )
+                stage["platforms"][key] = {
+                    "status": "collected", "rows": len(rows), "local_file": prior["local_file"],
+                    "_rows": rows, "_send_fn": fn_send, "attempts": 0,
+                    "reused_from_previous_run": True,
+                }
+                continue
+            except Exception as exc:
+                log.warning(
+                    "dashspy_ads[%s]: não consegui reaproveitar %s (%s) — recoletando do zero.",
+                    nome, prior.get("local_file"), exc,
+                )
+
         def attempt(fn_collect=fn_collect, nome=nome):
             try:
                 rows, path = fn_collect(sb, recording_ts)
@@ -253,7 +334,7 @@ def run_ads_stage() -> dict[str, Any]:
 # Fase 1 / Etapa A: dashspy_hubspot (coleta apenas — sem envio)
 # ---------------------------------------------------------------------------
 
-def run_hubspot_stage(recording_ts: str) -> dict[str, Any]:
+def run_hubspot_stage(recording_ts: str, prior_sources: dict[str, Any] | None = None) -> dict[str, Any]:
     stage: dict[str, Any] = {
         "name": "dashspy_hubspot",
         "started_at": iso(utc_now()),
@@ -270,6 +351,33 @@ def run_hubspot_stage(recording_ts: str) -> dict[str, Any]:
     ]
 
     for key, nome, fn_collect, fn_resume, fn_send in sources:
+        prior = (prior_sources or {}).get(key)
+
+        if prior and prior.get("status") == "sent":
+            log.info("dashspy_hubspot[%s]: já enviado numa tentativa anterior — pulando.", nome)
+            stage["sources"][key] = prior
+            continue
+
+        if prior and prior.get("status") == "collected" and prior.get("local_file"):
+            try:
+                rows = _load_local_rows(prior["local_file"])
+                log.info(
+                    "dashspy_hubspot[%s]: reaproveitando %d linhas já coletadas em %s "
+                    "(tentativa anterior) — não vai recoletar.",
+                    nome, len(rows), prior["local_file"],
+                )
+                stage["sources"][key] = {
+                    "status": "collected", "rows": len(rows), "local_file": prior["local_file"],
+                    "_rows": rows, "_send_fn": fn_send, "attempts": 0,
+                    "reused_from_previous_run": True,
+                }
+                continue
+            except Exception as exc:
+                log.warning(
+                    "dashspy_hubspot[%s]: não consegui reaproveitar %s (%s) — recoletando do zero.",
+                    nome, prior.get("local_file"), exc,
+                )
+
         def attempt(fn_collect=fn_collect, fn_resume=fn_resume, nome=nome, fn_send=fn_send):
             try:
                 rows, path = fn_collect(sb, recording_ts)
@@ -315,7 +423,11 @@ def _manifest_error_text(manifest_summary: dict[str, Any] | None) -> str:
     return "; ".join(errs) or f"status={manifest_summary.get('status')}"
 
 
-def run_events_stage(cutoff_iso: str, run_type: str) -> dict[str, Any]:
+def run_events_stage(cutoff_iso: str, run_type: str, prior_stage: dict[str, Any] | None = None) -> dict[str, Any]:
+    if prior_stage and prior_stage.get("status") in ("success", "nothing_to_do"):
+        log.info("hubspot_eventos: já concluído (%s) numa tentativa anterior — pulando.", prior_stage.get("status"))
+        return prior_stage
+
     stage: dict[str, Any] = {"name": "hubspot_eventos", "run_type": run_type, "started_at": iso(utc_now())}
     box: dict[str, Any] = {}
     attempt_counter = {"n": 0}
@@ -663,7 +775,43 @@ def summarize_pending(run_report: dict[str, Any]) -> list[str]:
     return lines
 
 
-def append_run_to_status_file(run_report: dict[str, Any]) -> None:
+def _describe_prior_run(run_report: dict[str, Any]) -> list[str]:
+    """Lista humanamente legível do que já foi feito vs. pendente numa run,
+    usada no prompt de retomada."""
+    lines: list[str] = []
+    stages = run_report.get("stages", {})
+
+    for key, label in (("dashspy_ads", "dashspy_ads"), ("dashspy_hubspot", "dashspy_hubspot")):
+        stage = stages.get(key)
+        if not stage:
+            lines.append(f"  [{label}] não iniciado")
+            continue
+        units = stage.get("platforms") or stage.get("sources") or {}
+        for unit_key, entry in units.items():
+            lines.append(f"  [{label}.{unit_key}] {entry.get('status', '?')}")
+
+    for key, label in (
+        ("hubspot_eventos", "hubspot_eventos"),
+        ("consolidate_hubspot_forms", "consolidate_hubspot_forms"),
+        ("consolidate_conversions_forms_localsrc", "consolidate_conversions_forms_localsrc"),
+        ("supabase_send_all", "supabase_send_all"),
+    ):
+        stage = stages.get(key)
+        lines.append(f"  [{label}] {stage.get('status', '?') if stage else 'não iniciado'}")
+
+    return lines
+
+
+def upsert_running_report(run_report: dict[str, Any]) -> None:
+    """Grava/atualiza o relatório da run atual na posição 0 do histórico
+    (mais recente primeiro, empurrando os anteriores pra baixo).
+
+    Chamada repetidas vezes ao longo de uma mesma run (não só no final) —
+    se `run_report["run_id"]` já é o da posição 0, atualiza no lugar; caso
+    contrário, insere uma entrada nova. Isso garante que o relatório
+    sempre reflete o estado mais atual possível, mesmo que o processo seja
+    interrompido no meio.
+    """
     history = []
     if STATUS_FILE.exists():
         try:
@@ -672,7 +820,11 @@ def append_run_to_status_file(run_report: dict[str, Any]) -> None:
         except Exception:
             log.warning("status file existente ilegível, será recriado.")
 
-    history.insert(0, _strip_runtime_fields(run_report))
+    stripped = _strip_runtime_fields(run_report)
+    if history and history[0].get("run_id") == run_report.get("run_id"):
+        history[0] = stripped
+    else:
+        history.insert(0, stripped)
     history = history[:MAX_RUNS_KEPT]
     write_json_atomic(STATUS_FILE, {"runs": history})
 
@@ -691,97 +843,202 @@ def main() -> int:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Ignora a trava de reexecução (última run pendente/com erro) e roda mesmo assim.",
+        help="Ignora a trava de reexecução e começa uma run nova do zero, sem reaproveitar "
+             "nada da run anterior incompleta.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Retoma automaticamente a última run incompleta, sem perguntar — reaproveita "
+             "unidades/etapas já concluídas (ads, contacts/deals, eventos) e só roda de novo "
+             "o que ainda falta.",
     )
     args = parser.parse_args()
 
+    if args.force and args.resume:
+        log.error("Use --force OU --resume, não os dois ao mesmo tempo.")
+        return 2
+
     last_run = load_last_run()
-    if last_run and last_run.get("overall_status") != "success" and not args.force:
-        log.error("=" * 90)
-        log.error(
-            "Execução recusada: a última run (%s, %s) não terminou 100%% "
-            "(overall_status=%s).",
-            last_run.get("run_id"), last_run.get("finished_at"), last_run.get("overall_status"),
+    resume_from: dict[str, Any] | None = None
+
+    if last_run and last_run.get("overall_status") != "success":
+        log.warning("=" * 90)
+        log.warning(
+            "Última run (%s) não terminou 100%% (overall_status=%s%s).",
+            last_run.get("run_id"),
+            last_run.get("overall_status"),
+            f", parou em {last_run.get('finished_at')}" if last_run.get("finished_at") else " — foi interrompida no meio",
         )
-        for line in summarize_pending(last_run):
-            log.error("  pendente -> %s", line)
-        log.error("Resolva manualmente e rode de novo, ou use --force para ignorar esta trava.")
-        log.error("=" * 90)
-        return 3
+        for line in _describe_prior_run(last_run):
+            log.warning(line)
+        log.warning("=" * 90)
+
+        if args.force:
+            log.warning("--force: ignorando a run anterior, começando 100%% do zero.")
+        elif args.resume:
+            log.info("--resume: retomando a partir da run anterior.")
+            resume_from = last_run
+        elif sys.stdin.isatty():
+            try:
+                resposta = input(
+                    "\nRetomar a partir de onde parou, reaproveitando o que já foi concluído? [s/N]: "
+                ).strip().lower()
+            except EOFError:
+                resposta = "n"
+            if resposta == "s":
+                resume_from = last_run
+            else:
+                log.error(
+                    "Execução recusada. Rode de novo e responda 's', ou use --resume "
+                    "(retomar sem perguntar) / --force (começar do zero)."
+                )
+                return 3
+        else:
+            log.error("=" * 90)
+            log.error(
+                "Execução recusada (sem terminal interativo pra perguntar). "
+                "Rode com --resume pra continuar de onde parou, ou --force pra começar do zero."
+            )
+            log.error("=" * 90)
+            return 3
 
     run_started_at = utc_now()
-    run_id = "run_" + run_started_at.strftime("%Y%m%d_%H%M%S")
-    cutoff_dt = compute_cutoff()
-    cutoff_iso = iso(cutoff_dt)
-    cutoff_rts = cutoff_recording_ts(cutoff_dt)
+    run_id = resume_from["run_id"] if resume_from else "run_" + run_started_at.strftime("%Y%m%d_%H%M%S")
     run_type = "historical" if args.historical else "daily"
 
+    # Ao retomar, o cutoff é o MESMO da run original que falhou — não um
+    # recalculado com "agora". O objetivo é terminar exatamente a run que
+    # ficou pendente (contacts/deals/eventos no mesmo corte), não esticá-la
+    # até o instante atual. Uma run nova (sem --resume) sempre calcula um
+    # cutoff fresco.
+    if resume_from and resume_from.get("cutoff_ts"):
+        cutoff_dt = parse_cutoff_iso(resume_from["cutoff_ts"])
+    else:
+        cutoff_dt = compute_cutoff()
+    cutoff_iso = iso(cutoff_dt)
+    cutoff_rts = cutoff_recording_ts(cutoff_dt)
+
     log.info("=" * 90)
-    log.info("Iniciando %s — cutoff compartilhado (now-%dmin): %s", run_id, SAFETY_BUFFER_MINUTES, cutoff_iso)
+    if resume_from:
+        log.info(
+            "Retomando %s — usando o cutoff ORIGINAL da run incompleta: %s",
+            run_id, cutoff_iso,
+        )
+    else:
+        log.info("Iniciando %s — cutoff compartilhado (now-%dmin): %s", run_id, SAFETY_BUFFER_MINUTES, cutoff_iso)
     log.info("hubspot_eventos run_type: %s", run_type)
-    if args.force and last_run:
-        log.warning("--force: ignorando trava de reexecução (última run era %s).", last_run.get("overall_status"))
     log.info("=" * 90)
 
     run_report: dict[str, Any] = {
         "run_id": run_id,
-        "started_at": iso(run_started_at),
+        "started_at": (resume_from or {}).get("started_at", iso(run_started_at)),
+        "resumed_at": iso(run_started_at) if resume_from else None,
         "cutoff_ts": cutoff_iso,
         "safety_buffer_minutes": SAFETY_BUFFER_MINUTES,
         "hubspot_eventos_run_type": run_type,
         "forced": args.force,
-        "stages": {},
+        "overall_status": "in_progress",
+        "stages": dict((resume_from or {}).get("stages", {})),
     }
+    upsert_running_report(run_report)
 
-    # --- Fase 1 / Etapa A: dashspy_ads + dashspy_hubspot em paralelo (coleta apenas) ---
-    log.info("--- Fase 1 / Etapa A: coleta dashspy_ads e dashspy_hubspot (paralelo, sem envio ainda) ---")
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        future_ads = pool.submit(run_ads_stage)
-        future_hubspot = pool.submit(run_hubspot_stage, cutoff_rts)
-        ads_stage = future_ads.result()
-        hubspot_stage = future_hubspot.result()
+    prior_stages = (resume_from or {}).get("stages", {})
 
-    run_report["stages"]["dashspy_ads"] = ads_stage
-    run_report["stages"]["dashspy_hubspot"] = hubspot_stage
+    try:
+        # --- Fase 1 / Etapa A: dashspy_ads + dashspy_hubspot em paralelo (coleta apenas) ---
+        log.info("--- Fase 1 / Etapa A: coleta dashspy_ads e dashspy_hubspot (paralelo, sem envio ainda) ---")
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            future_ads = pool.submit(run_ads_stage, prior_stages.get("dashspy_ads", {}).get("platforms"))
+            future_hubspot = pool.submit(
+                run_hubspot_stage, cutoff_rts, prior_stages.get("dashspy_hubspot", {}).get("sources"),
+            )
+            ads_stage = future_ads.result()
+            hubspot_stage = future_hubspot.result()
 
-    # --- Fase 1 / Etapa B: pipeline de eventos HubSpot (sequencial) ---
-    log.info("--- Fase 1 / Etapa B: hubspot_eventos -> consolidate_hubspot_forms -> consolidate_conversions ---")
-    events_stage = run_events_stage(cutoff_iso, run_type)
-    run_report["stages"]["hubspot_eventos"] = events_stage
+        run_report["stages"]["dashspy_ads"] = ads_stage
+        run_report["stages"]["dashspy_hubspot"] = hubspot_stage
+        upsert_running_report(run_report)
 
-    forms_stage = run_consolidate_forms_stage()
-    run_report["stages"]["consolidate_hubspot_forms"] = forms_stage
+        # --- Fase 1 / Etapa B: pipeline de eventos HubSpot (sequencial) ---
+        log.info("--- Fase 1 / Etapa B: hubspot_eventos -> consolidate_hubspot_forms -> consolidate_conversions ---")
+        prior_events_stage = prior_stages.get("hubspot_eventos")
+        events_stage = run_events_stage(cutoff_iso, run_type, prior_events_stage)
+        run_report["stages"]["hubspot_eventos"] = events_stage
+        upsert_running_report(run_report)
 
-    conversions_stage, conversions_build_result = run_consolidate_conversions_stage()
-    run_report["stages"]["consolidate_conversions_forms_localsrc"] = conversions_stage
+        # consolidate_hubspot_forms/consolidate_conversions releem e reprocessam
+        # TODO o histórico local acumulado (todos os JSONL de forms/ad_interactions/
+        # page_views já baixados, não só o incremento novo) — não são baratos de
+        # "só rodar de novo por garantia". Se hubspot_eventos foi pulado (nada novo
+        # desde a tentativa anterior) e essas duas etapas já tinham terminado bem
+        # antes, não há nada de novo pra consolidar — reaproveita o resultado
+        # anterior em vez de refazer o trabalho inteiro pra chegar no mesmo lugar.
+        events_was_skipped = events_stage is prior_events_stage
 
-    # --- Fase 2: gate tudo-ou-nada ---
-    upstream_clean = all(
-        _is_stage_clean(name, run_report["stages"][name])
-        for name in ("dashspy_ads", "dashspy_hubspot", "hubspot_eventos",
-                      "consolidate_hubspot_forms", "consolidate_conversions_forms_localsrc")
-    )
-    log.info("--- Fase 2: gate de envio — upstream_clean=%s ---", upstream_clean)
+        prior_forms_stage = prior_stages.get("consolidate_hubspot_forms")
+        if events_was_skipped and prior_forms_stage and prior_forms_stage.get("status") == "success":
+            log.info("consolidate_hubspot_forms: eventos não trouxe nada novo — reaproveitando resultado anterior, pulando.")
+            forms_stage = prior_forms_stage
+        else:
+            forms_stage = run_consolidate_forms_stage()
+        run_report["stages"]["consolidate_hubspot_forms"] = forms_stage
+        upsert_running_report(run_report)
 
-    # --- Fase 3: envio único ao Supabase (tudo ou nada) ---
-    send_stage = run_send_all_stage(
-        ads_stage=ads_stage,
-        hubspot_stage=hubspot_stage,
-        events_stage=events_stage,
-        forms_stage=forms_stage,
-        conversions_build_result=conversions_build_result,
-        upstream_clean=upstream_clean,
-    )
-    run_report["stages"]["supabase_send_all"] = send_stage
+        prior_conversions_stage = prior_stages.get("consolidate_conversions_forms_localsrc")
+        if events_was_skipped and prior_conversions_stage and prior_conversions_stage.get("status") in ("ready_for_review", "no_rows"):
+            log.info("consolidate_conversions_forms_localsrc: eventos não trouxe nada novo — reaproveitando resultado anterior, pulando.")
+            conversions_stage = prior_conversions_stage
+            conversions_build_result = None  # já foi enviado (ou não havia nada a enviar) na tentativa anterior
+        else:
+            conversions_stage, conversions_build_result = run_consolidate_conversions_stage()
+        run_report["stages"]["consolidate_conversions_forms_localsrc"] = conversions_stage
+        upsert_running_report(run_report)
 
-    run_finished_at = utc_now()
-    run_report["finished_at"] = iso(run_finished_at)
-    run_report["duration_seconds"] = (run_finished_at - run_started_at).total_seconds()
+        # --- Fase 2: gate tudo-ou-nada ---
+        upstream_clean = all(
+            _is_stage_clean(name, run_report["stages"][name])
+            for name in ("dashspy_ads", "dashspy_hubspot", "hubspot_eventos",
+                          "consolidate_hubspot_forms", "consolidate_conversions_forms_localsrc")
+        )
+        log.info("--- Fase 2: gate de envio — upstream_clean=%s ---", upstream_clean)
 
-    # Binário de propósito: qualquer coisa que não seja 100% bloqueia a próxima execução (ver load_last_run/--force).
-    run_report["overall_status"] = "success" if (upstream_clean and send_stage["status"] in ("success", "nothing_to_send")) else "failed"
+        # --- Fase 3: envio único ao Supabase (tudo ou nada) ---
+        send_stage = run_send_all_stage(
+            ads_stage=ads_stage,
+            hubspot_stage=hubspot_stage,
+            events_stage=events_stage,
+            forms_stage=forms_stage,
+            conversions_build_result=conversions_build_result,
+            upstream_clean=upstream_clean,
+        )
+        run_report["stages"]["supabase_send_all"] = send_stage
 
-    append_run_to_status_file(run_report)
+        run_finished_at = utc_now()
+        run_report["finished_at"] = iso(run_finished_at)
+        run_report["duration_seconds"] = (run_finished_at - run_started_at).total_seconds()
+
+        # Binário de propósito: qualquer coisa que não seja 100% bloqueia a próxima execução (ver load_last_run/--force/--resume).
+        run_report["overall_status"] = "success" if (upstream_clean and send_stage["status"] in ("success", "nothing_to_send")) else "failed"
+        upsert_running_report(run_report)
+
+    except KeyboardInterrupt:
+        run_report["overall_status"] = "in_progress"
+        run_report["interrupted_at"] = iso(utc_now())
+        upsert_running_report(run_report)
+        log.warning(
+            "Execução interrompida pelo usuário. Progresso salvo em %s — "
+            "rode de novo com --resume pra continuar de onde parou.",
+            STATUS_FILE,
+        )
+        return 130
+    except Exception as exc:
+        run_report["overall_status"] = "failed"
+        run_report["crashed_at"] = iso(utc_now())
+        run_report["crash_error"] = str(exc)
+        upsert_running_report(run_report)
+        log.error("Execução interrompida por erro inesperado: %s", exc, exc_info=True)
+        return 1
 
     log.info("=" * 90)
     log.info("%s finalizado — overall_status=%s", run_id, run_report["overall_status"])
@@ -795,8 +1052,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except KeyboardInterrupt:
-        log.warning("Execução interrompida pelo usuário.")
-        sys.exit(130)
+    sys.exit(main())
