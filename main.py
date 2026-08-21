@@ -353,10 +353,22 @@ def run_hubspot_stage(recording_ts: str, prior_sources: dict[str, Any] | None = 
     for key, nome, fn_collect, fn_resume, fn_send in sources:
         prior = (prior_sources or {}).get(key)
 
-        if prior and prior.get("status") == "sent":
+        if prior and prior.get("status") == "sent" and not prior.get("incomplete_window"):
             log.info("dashspy_hubspot[%s]: já enviado numa tentativa anterior — pulando.", nome)
             stage["sources"][key] = prior
             continue
+
+        if prior and prior.get("status") == "sent" and prior.get("incomplete_window"):
+            # Foi enviado, mas só cobria uma janela antiga/incompleta (ver
+            # incomplete_window) — não é seguro pular: ainda falta coletar o
+            # intervalo real até o cutoff. Recoleta do zero (fn_collect vai
+            # naturalmente pegar só o que falta, a partir do que já está no
+            # Supabase).
+            log.info(
+                "dashspy_hubspot[%s]: envio anterior só cobriu até %s — recoletando "
+                "a partir daí para fechar a lacuna.",
+                nome, prior["incomplete_window"].get("covered_until"),
+            )
 
         if prior and prior.get("status") == "collected" and prior.get("local_file"):
             try:
@@ -378,20 +390,46 @@ def run_hubspot_stage(recording_ts: str, prior_sources: dict[str, Any] | None = 
                     nome, prior.get("local_file"), exc,
                 )
 
-        def attempt(fn_collect=fn_collect, fn_resume=fn_resume, nome=nome, fn_send=fn_send):
+        def attempt(fn_collect=fn_collect, fn_resume=fn_resume, key=key, nome=nome, fn_send=fn_send):
+            incomplete_window = None
             try:
                 rows, path = fn_collect(sb, recording_ts)
             except dashspy_hubspot.RetryPointPending as exc:
                 log.warning("%s: retry point pendente de execução anterior — tentando retomar: %s", nome, exc)
+                # O retry point resolve só a janela ANTIGA presa (até o cutoff que
+                # ele tinha guardado) — não continua coletando até o cutoff desta
+                # run. Sem isto, a etapa fica marcada como concluída mesmo tendo
+                # um intervalo real (cutoff antigo -> cutoff desta run) que nunca
+                # foi buscado, e o relatório mentiria dizendo "success".
+                retry_state_before = dashspy_hubspot._load_retry_state(key)
                 try:
                     rows, path = fn_resume()
                 except Exception as exc2:
                     return {"status": "error", "error": str(exc2)}
+                if retry_state_before:
+                    old_cutoff_ms = int(retry_state_before.get("cutoff_ms") or 0)
+                    now_ms = dashspy_hubspot._recording_ts_to_ms(recording_ts)
+                    if old_cutoff_ms and old_cutoff_ms < now_ms:
+                        incomplete_window = {
+                            "reason": "retry point resolveu só até o cutoff antigo — janela seguinte ainda não coletada",
+                            "covered_until": dashspy_hubspot._ms_to_iso(old_cutoff_ms),
+                            "still_missing_from": dashspy_hubspot._ms_to_iso(old_cutoff_ms),
+                            "still_missing_to": dashspy_hubspot._ms_to_iso(now_ms),
+                        }
+                        log.warning(
+                            "%s: retry point resolvido só cobre até %s — ainda falta coletar "
+                            "%s até %s (fica pendente pra próxima execução).",
+                            nome, incomplete_window["covered_until"],
+                            incomplete_window["still_missing_from"], incomplete_window["still_missing_to"],
+                        )
             except Exception as exc:
                 return {"status": "error", "error": str(exc)}
             if not rows:
                 return {"status": "up_to_date_or_retry_pending", "rows": 0}
-            return {"status": "collected", "rows": len(rows), "local_file": path, "_rows": rows, "_send_fn": fn_send}
+            result_entry = {"status": "collected", "rows": len(rows), "local_file": path, "_rows": rows, "_send_fn": fn_send}
+            if incomplete_window:
+                result_entry["incomplete_window"] = incomplete_window
+            return result_entry
 
         entry = _retry_loop(f"dashspy_hubspot[{nome}] coleta", attempt)
         stage["sources"][key] = entry
@@ -404,6 +442,8 @@ def run_hubspot_stage(recording_ts: str, prior_sources: dict[str, Any] | None = 
 def _collect_rollup(units) -> str:
     units = list(units)
     if any(u.get("status") == "error" for u in units):
+        return "failed"
+    if any(u.get("incomplete_window") for u in units):
         return "failed"
     return "success"
 
@@ -611,6 +651,13 @@ def _send_units(label_prefix: str, units: dict[str, Any], sb: Any) -> None:
         entry["send_attempts"] = result["attempts"]
         if result["status"] == "error":
             entry["error"] = result.get("error")
+        elif result["status"] == "sent" and key in ("hubspot", "deals"):
+            # dashspy_hubspot mantém seu próprio retry point por fonte
+            # (hubspot/deals), independente do relatório do orquestrador.
+            # Sem isto, um retry point antigo já enviado com sucesso nunca
+            # é limpo e volta a ser detectado como pendente em toda run futura.
+            if dashspy_hubspot._load_retry_state(key):
+                dashspy_hubspot._clear_retry_state(key)
 
 
 def run_send_all_stage(
@@ -620,6 +667,7 @@ def run_send_all_stage(
     forms_stage: dict[str, Any],
     conversions_build_result: dict[str, Any] | None,
     upstream_clean: bool,
+    prior_send_stage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     stage: dict[str, Any] = {"name": "supabase_send_all", "started_at": iso(utc_now()), "artifacts": {}}
 
@@ -628,6 +676,13 @@ def run_send_all_stage(
         stage["finished_at"] = iso(utc_now())
         log.warning("Fase 3 (envio) pulada por completo: pelo menos uma etapa da Fase 1 não terminou limpa.")
         return stage
+
+    # ad_interactions/forms/conversions não têm rastreio por unidade (como
+    # ads/hubspot têm) — eles são reconstruídos a cada vez a partir do que
+    # hubspot_eventos/forms/conversions listam como "completo", mesmo quando
+    # essas etapas foram puladas por reaproveitamento (nada de novo). Sem
+    # isto, cada retomada reenviaria de novo tudo já confirmado enviado.
+    prior_artifacts = (prior_send_stage or {}).get("artifacts", {})
 
     sb_ads = dashspy_ads.get_supabase_client()
     sb_hs = dashspy_hubspot.get_supabase_client()
@@ -640,6 +695,12 @@ def run_send_all_stage(
 
     # 3) ad_interactions brutos (e_ad_interaction) -> data_hs_ad_interactions_v2
     for f in _event_type_files(events_stage, "e_ad_interaction"):
+        artifact_key = f"ads_interactions:{f}"
+        if prior_artifacts.get(artifact_key, {}).get("status") == "sent":
+            log.info("%s: já enviado numa tentativa anterior — pulando.", artifact_key)
+            stage["artifacts"][artifact_key] = prior_artifacts[artifact_key]
+            continue
+
         def attempt(f=f):
             try:
                 summary = sb_uploader.upload_jsonl(
@@ -660,12 +721,18 @@ def run_send_all_stage(
             return {"status": "sent", "summary": summary}
 
         result = _retry_loop(f"ad_interactions[{f}] envio", attempt)
-        stage["artifacts"][f"ads_interactions:{f}"] = result
+        stage["artifacts"][artifact_key] = result
 
     # 4) forms consolidados desta run -> data_hs_form_submissions_v2
     for run_id in _successful_form_run_ids(forms_stage):
         path = CONSOLIDATED_FORMS_DIR / f"{run_id}__forms_consolidated_v1.jsonl"
         if not path.exists():
+            continue
+
+        artifact_key = f"forms:{path}"
+        if prior_artifacts.get(artifact_key, {}).get("status") == "sent":
+            log.info("%s: já enviado numa tentativa anterior — pulando.", artifact_key)
+            stage["artifacts"][artifact_key] = prior_artifacts[artifact_key]
             continue
 
         def attempt(path=path):
@@ -688,24 +755,30 @@ def run_send_all_stage(
             return {"status": "sent", "summary": summary}
 
         result = _retry_loop(f"forms[{path.name}] envio", attempt)
-        stage["artifacts"][f"forms:{path}"] = result
+        stage["artifacts"][artifact_key] = result
 
     # 5) conversions consolidadas -> data_hs_forms_conversions_consolidated_v1
     if conversions_build_result and conversions_build_result["consolidated_rows"]:
-        def attempt():
-            try:
-                uploaded = consolidate_conversions.upload_rows(
-                    sb=conversions_build_result["sb"],
-                    rows=conversions_build_result["consolidated_rows"],
-                )
-            except Exception as exc:
-                return {"status": "error", "error": str(exc)}
-            return {"status": "sent", "uploaded_rows": uploaded}
+        artifact_key = f"conversions:{conversions_build_result['output_jsonl']}"
 
-        result = _retry_loop("conversions envio", attempt)
-        if result["status"] == "sent":
-            consolidate_conversions.finalize_upload(conversions_build_result, result["uploaded_rows"])
-        stage["artifacts"][f"conversions:{conversions_build_result['output_jsonl']}"] = result
+        if prior_artifacts.get(artifact_key, {}).get("status") == "sent":
+            log.info("%s: já enviado numa tentativa anterior — pulando.", artifact_key)
+            stage["artifacts"][artifact_key] = prior_artifacts[artifact_key]
+        else:
+            def attempt():
+                try:
+                    uploaded = consolidate_conversions.upload_rows(
+                        sb=conversions_build_result["sb"],
+                        rows=conversions_build_result["consolidated_rows"],
+                    )
+                except Exception as exc:
+                    return {"status": "error", "error": str(exc)}
+                return {"status": "sent", "uploaded_rows": uploaded}
+
+            result = _retry_loop("conversions envio", attempt)
+            if result["status"] == "sent":
+                consolidate_conversions.finalize_upload(conversions_build_result, result["uploaded_rows"])
+            stage["artifacts"][artifact_key] = result
 
     unit_statuses = [u.get("status") for u in ads_stage["platforms"].values() if u.get("status") in ("sent", "error")]
     unit_statuses += [u.get("status") for u in hubspot_stage["sources"].values() if u.get("status") in ("sent", "error")]
@@ -788,7 +861,11 @@ def _describe_prior_run(run_report: dict[str, Any]) -> list[str]:
             continue
         units = stage.get("platforms") or stage.get("sources") or {}
         for unit_key, entry in units.items():
-            lines.append(f"  [{label}.{unit_key}] {entry.get('status', '?')}")
+            line = f"  [{label}.{unit_key}] {entry.get('status', '?')}"
+            gap = entry.get("incomplete_window")
+            if gap:
+                line += f" (INCOMPLETO — falta coletar {gap.get('still_missing_from')} até {gap.get('still_missing_to')})"
+            lines.append(line)
 
     for key, label in (
         ("hubspot_eventos", "hubspot_eventos"),
@@ -830,21 +907,134 @@ def upsert_running_report(run_report: dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# --retry-only: resolve uma pendência específica sem rodar o resto do
+# pipeline. Substitui os comandos de retry que existiam nos scripts
+# individuais — a partir de agora só existem por aqui, e sempre atualizam
+# o mesmo relatório único (nunca um estado paralelo que main.py não veja).
+# ---------------------------------------------------------------------------
+
+def _update_report_after_retry_only(source: str, status: str, rows: int, path: str | None) -> None:
+    """Se essa fonte estiver referenciada na última run registrada, atualiza
+    o relatório único no lugar — em vez de deixar um estado que só o
+    dashspy_hubspot sabe (o problema original que causou tudo isso)."""
+    last = load_last_run()
+    if not last:
+        return
+    hs_stage = last.get("stages", {}).get("dashspy_hubspot")
+    if not hs_stage or source not in hs_stage.get("sources", {}):
+        return
+
+    unit = hs_stage["sources"][source]
+    unit["status"] = status
+    unit["rows"] = rows
+    unit["local_file"] = path
+    unit.pop("incomplete_window", None)
+    hs_stage["status"] = _collect_rollup(hs_stage["sources"].values())
+
+    upstream_clean = all(
+        _is_stage_clean(name, last["stages"].get(name, {}))
+        for name in ("dashspy_ads", "dashspy_hubspot", "hubspot_eventos",
+                      "consolidate_hubspot_forms", "consolidate_conversions_forms_localsrc")
+    )
+    send_ok = last.get("stages", {}).get("supabase_send_all", {}).get("status") in ("success", "nothing_to_send")
+    last["overall_status"] = "success" if (upstream_clean and send_ok) else "failed"
+
+    upsert_running_report(last)
+    log.info("Relatório único atualizado (%s).", STATUS_FILE)
+
+
+def _run_retry_only(target: str) -> int:
+    if target in ("hubspot-contacts", "hubspot-deals"):
+        source = "hubspot" if target == "hubspot-contacts" else "deals"
+        state = dashspy_hubspot._load_retry_state(source)
+        if not state:
+            log.info("Não há retry point pendente para %s.", target)
+            return 0
+
+        # Se o relatório único já confirma que esse retry point específico
+        # (mesmo complete_output_path) foi enviado com sucesso antes, ele é
+        # lixo órfão — nunca foi limpo, mas não há nada de fato pendente.
+        # Sem esta checagem, reenviaria à toa (upsert é seguro, mas lento
+        # e desnecessário para centenas de milhares de linhas).
+        last = load_last_run()
+        prior_unit = ((last or {}).get("stages", {}).get("dashspy_hubspot", {}).get("sources", {}).get(source))
+        if (
+            prior_unit
+            and prior_unit.get("status") == "sent"
+            and prior_unit.get("local_file") == state.get("complete_output_path")
+        ):
+            log.info(
+                "%s: o relatório já confirma que %s foi enviado com sucesso — "
+                "retry point é órfão, limpando sem reenviar.",
+                target, state.get("complete_output_path"),
+            )
+            dashspy_hubspot._clear_retry_state(source)
+            return 0
+
+        fn_resume = dashspy_hubspot.resume_hubspot_contacts if source == "hubspot" else dashspy_hubspot.resume_hubspot_deals
+        fn_send = dashspy_hubspot.send_hubspot if source == "hubspot" else dashspy_hubspot.send_deals
+
+        log.info("--retry-only %s: retomando retry point (status=%s)...", target, state.get("status"))
+        try:
+            rows, path = fn_resume()
+        except Exception as exc:
+            log.error("Retry de %s falhou: %s", target, exc, exc_info=True)
+            return 1
+
+        if not rows:
+            log.info("%s: retomada não produziu linhas novas.", target)
+            return 0
+
+        sb = dashspy_hubspot.get_supabase_client()
+        try:
+            fn_send(sb, rows)
+        except Exception as exc:
+            log.error("Envio de %s falhou: %s", target, exc, exc_info=True)
+            return 1
+
+        dashspy_hubspot._clear_retry_state(source)
+        log.info("%s: %d linhas enviadas, retry point limpo.", target, len(rows))
+        _update_report_after_retry_only(source, "sent", len(rows), path)
+        return 0
+
+    if target == "events":
+        log.info("--retry-only events: reprocessando manifestos incompletos (sem criar janela nova)...")
+        summaries = hubspot_eventos.retry_incomplete_manifests()
+        if not summaries:
+            log.info("Nenhum manifesto incompleto encontrado.")
+            return 0
+        for s in summaries:
+            log.info("  run_id=%s status=%s", s.get("run_id"), s.get("status"))
+        if any(s.get("status") != "complete" for s in summaries):
+            log.error("Algum manifesto continua incompleto — rode de novo depois de investigar.")
+            return 1
+        log.info("Todos os manifestos pendentes foram reprocessados com sucesso.")
+        return 0
+
+    log.error("Alvo de --retry-only desconhecido: %s", target)
+    return 2
+
+
+# ---------------------------------------------------------------------------
 # Orquestração principal
 # ---------------------------------------------------------------------------
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Orquestrador do pipeline paidmedia-dash-backend.")
     parser.add_argument(
-        "--historical",
-        action="store_true",
-        help="Roda hubspot_eventos em modo histórico em vez de daily (padrão: daily).",
+        "--events-run-type",
+        choices=["daily", "historical"],
+        default="daily",
+        help="Modo do hubspot_eventos nesta run completa (padrão: daily). Para só "
+             "reprocessar manifestos incompletos sem rodar o resto do pipeline, use "
+             "--retry-only events.",
     )
     parser.add_argument(
         "--force",
         action="store_true",
         help="Ignora a trava de reexecução e começa uma run nova do zero, sem reaproveitar "
-             "nada da run anterior incompleta.",
+             "nada da run anterior incompleta. Exige confirmação interativa mesmo assim — "
+             "nunca roda desassistido.",
     )
     parser.add_argument(
         "--resume",
@@ -853,7 +1043,18 @@ def main() -> int:
              "unidades/etapas já concluídas (ads, contacts/deals, eventos) e só roda de novo "
              "o que ainda falta.",
     )
+    parser.add_argument(
+        "--retry-only",
+        choices=["hubspot-contacts", "hubspot-deals", "events"],
+        help="Resolve só essa pendência específica (sem rodar o resto do pipeline) e sai. "
+             "Substitui os comandos de retry que existiam nos scripts individuais "
+             "(dashspy_hubspot.py hubspot-resume/deals-resume, hubspot_eventos ...--run-type retry) "
+             "— agora tudo passa pelo relatório único do main.py.",
+    )
     args = parser.parse_args()
+
+    if args.retry_only:
+        return _run_retry_only(args.retry_only)
 
     if args.force and args.resume:
         log.error("Use --force OU --resume, não os dois ao mesmo tempo.")
@@ -862,20 +1063,61 @@ def main() -> int:
     last_run = load_last_run()
     resume_from: dict[str, Any] | None = None
 
-    if last_run and last_run.get("overall_status") != "success":
+    # dashspy_hubspot mantém, por fonte (hubspot/deals), seu próprio retry
+    # point em disco — um mecanismo separado do relatório do orquestrador,
+    # que existia antes deste e não é apagado automaticamente por ele. Uma
+    # run pendente aqui tem que travar a próxima execução do main.py da
+    # mesma forma que uma run do orquestrador incompleta trava — não pode
+    # ser só resolvida em silêncio no meio de uma etapa sem o operador saber.
+    pending_retry_sources = [s for s in ("hubspot", "deals") if dashspy_hubspot._load_retry_state(s)]
+    orchestrator_pending = bool(last_run and last_run.get("overall_status") != "success")
+
+    if orchestrator_pending or pending_retry_sources:
         log.warning("=" * 90)
-        log.warning(
-            "Última run (%s) não terminou 100%% (overall_status=%s%s).",
-            last_run.get("run_id"),
-            last_run.get("overall_status"),
-            f", parou em {last_run.get('finished_at')}" if last_run.get("finished_at") else " — foi interrompida no meio",
-        )
-        for line in _describe_prior_run(last_run):
-            log.warning(line)
+        if orchestrator_pending:
+            log.warning(
+                "Última run (%s) não terminou 100%% (overall_status=%s%s).",
+                last_run.get("run_id"),
+                last_run.get("overall_status"),
+                f", parou em {last_run.get('finished_at')}" if last_run.get("finished_at") else " — foi interrompida no meio",
+            )
+            for line in _describe_prior_run(last_run):
+                log.warning(line)
+        for source in pending_retry_sources:
+            state = dashspy_hubspot._load_retry_state(source)
+            log.warning(
+                "  [dashspy_hubspot retry point] %s: status=%s (última atualização: %s) — "
+                "não foi enviado/limpo ainda, independente do relatório do orquestrador.",
+                source, state.get("status"), state.get("updated_at"),
+            )
         log.warning("=" * 90)
 
         if args.force:
-            log.warning("--force: ignorando a run anterior, começando 100%% do zero.")
+            # --force é destrutivo (descarta uma run incompleta e tudo que
+            # ela já tinha feito) — precisa de um humano confirmando na hora,
+            # nunca pode disparar sozinho (cron, script, --force "esquecido"
+            # numa automação). Sem terminal interativo, é recusado mesmo com
+            # a flag.
+            if not sys.stdin.isatty():
+                log.error("=" * 90)
+                log.error(
+                    "Execução recusada: --force exige confirmação humana em terminal "
+                    "interativo — não pode ser usado de forma desassistida (cron, script "
+                    "automatizado, etc.)."
+                )
+                log.error("=" * 90)
+                return 3
+            try:
+                resposta = input(
+                    "\n--force vai DESCARTAR a run anterior incompleta e começar 100% do "
+                    "zero (nada do que já foi feito é reaproveitado). Confirma? [s/N]: "
+                ).strip().lower()
+            except EOFError:
+                resposta = "n"
+            if resposta != "s":
+                log.error("Execução recusada. --force não confirmado.")
+                return 3
+            log.warning("--force confirmado: ignorando a run anterior, começando 100%% do zero.")
         elif args.resume:
             log.info("--resume: retomando a partir da run anterior.")
             resume_from = last_run
@@ -903,9 +1145,24 @@ def main() -> int:
             log.error("=" * 90)
             return 3
 
+        # Se o relatório do orquestrador já confirma que essa fonte foi
+        # enviada com sucesso numa run anterior, o retry point é lixo órfão
+        # (nunca foi limpo) — sem isso, a lógica de "pular unidade já
+        # enviada" nem chegaria a tocar em dashspy_hubspot de novo, e o
+        # arquivo ficaria preso pra sempre. Limpa aqui, antes de decidir
+        # o que reaproveitar/pular.
+        for source in pending_retry_sources:
+            prior_sources = ((last_run or {}).get("stages", {}).get("dashspy_hubspot", {}).get("sources", {}))
+            if prior_sources.get(source, {}).get("status") == "sent":
+                log.info(
+                    "dashspy_hubspot retry point de %s já foi enviado com sucesso antes — "
+                    "limpando arquivo órfão.", source,
+                )
+                dashspy_hubspot._clear_retry_state(source)
+
     run_started_at = utc_now()
     run_id = resume_from["run_id"] if resume_from else "run_" + run_started_at.strftime("%Y%m%d_%H%M%S")
-    run_type = "historical" if args.historical else "daily"
+    run_type = args.events_run_type
 
     # Ao retomar, o cutoff é o MESMO da run original que falhou — não um
     # recalculado com "agora". O objetivo é terminar exatamente a run que
@@ -1011,6 +1268,7 @@ def main() -> int:
             forms_stage=forms_stage,
             conversions_build_result=conversions_build_result,
             upstream_clean=upstream_clean,
+            prior_send_stage=prior_stages.get("supabase_send_all"),
         )
         run_report["stages"]["supabase_send_all"] = send_stage
 

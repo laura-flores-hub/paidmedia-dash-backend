@@ -1257,6 +1257,8 @@ DEAL_PROPERTIES = [
     "ae_deal_won",
     "ae_squad",
     "first_meeting_status",
+    "call_de_demo",  # label no HubSpot: "First Meeting Date"
+    "who_closed_the_lead",  # label no HubSpot: "Account Executive" (referencia um Owner, vem como ID)
     "pais",
 ]
 
@@ -1411,6 +1413,8 @@ def process_deal_records(deals: list[dict], recording_ts: str) -> list[dict]:
             "ae_deal_won":         props.get("ae_deal_won"),
             "ae_squad":            props.get("ae_squad"),
             "first_meeting_status": props.get("first_meeting_status"),
+            "first_meeting_date":  _parse_timestamp(props.get("call_de_demo")),
+            "who_closed_the_lead": props.get("who_closed_the_lead"),
             "deal_source":         props.get("origen_del_contacto__from_where_we_got_the_call_"),
             "pais":                props.get("pais"),
             "contact_ids":         deal_contacts.get(did, []),
